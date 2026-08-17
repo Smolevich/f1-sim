@@ -41,6 +41,18 @@ export function buildEdges(track: Track): TrackEdges {
   return { left, right }
 }
 
+/** Стартовая позиция и курс: первая точка осевой, нос — вдоль неё вперёд. */
+export function startPose(track: Track): { position: TrackPoint; headingRad: number } {
+  const a = track.centerline[0]
+  const b = track.centerline[1 % track.centerline.length]
+  return {
+    position: { x: a.x, y: a.y, z: a.z },
+    // Продольная ось болида — +Z, поэтому курс отсчитывается от +Z к +X:
+    // отсюда порядок аргументов atan2(dx, dz), а не привычный atan2(dz, dx).
+    headingRad: Math.atan2(b.x - a.x, b.z - a.z),
+  }
+}
+
 /**
  * Пройденная дистанция от точки старта до узла index, метры.
  *

@@ -19,6 +19,12 @@ export type CarTelemetry = {
   position: TrackPoint
 }
 
+export type VehicleStart = {
+  position: TrackPoint
+  /** Курс в радианах вокруг оси Y: куда смотрит нос болида на старте. */
+  headingRad: number
+}
+
 const MASS_KG = 798
 const WHEELBASE_M = 3.6
 const TRACK_WIDTH_M = 1.6
@@ -56,16 +62,23 @@ export class Vehicle {
   private tyres: TyreState[]
   private aero: AeroSetup = { frontWing: 0.5, rearWing: 0.5 }
 
-  constructor(aero?: AeroSetup) {
+  constructor(aero?: AeroSetup, start?: VehicleStart) {
     if (aero) this.aero = aero
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
 
     const ground = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     this.world.createCollider(RAPIER.ColliderDesc.cuboid(5000, 0.1, 5000), ground)
 
+    // Без стартовой позы болид появляется в начале координат — так его ставят
+    // тесты физики на плоском полигоне. В игре позу задаёт трасса, иначе машина
+    // спавнится в километре от полотна и едет по пустоте.
+    const spawn = start?.position ?? { x: 0, y: 0, z: 0 }
+    const heading = start?.headingRad ?? 0
+
     this.body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(0, SUSPENSION_REST_M + 0.2, 0)
+        .setTranslation(spawn.x, spawn.y + SUSPENSION_REST_M + 0.2, spawn.z)
+        .setRotation(yawQuaternion(heading))
         .setLinearDamping(0.05)
         .setAngularDamping(0.6),
     )
@@ -224,6 +237,11 @@ function rotate(v: Vec3, q: RAPIER.Rotation): Vec3 {
     y: iy * w + iw * -y + iz * -x - ix * -z,
     z: iz * w + iw * -z + ix * -y - iy * -x,
   }
+}
+
+/** Кватернион поворота вокруг оси Y на угол курса. */
+function yawQuaternion(angle: number): RAPIER.Rotation {
+  return { x: 0, y: Math.sin(angle / 2), z: 0, w: Math.cos(angle / 2) }
 }
 
 function rotateY(v: Vec3, angle: number): Vec3 {

@@ -6,6 +6,7 @@ import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
 import { buildCar } from './render/car'
 import { createScene } from './render/scene'
 import { buildTrackMesh } from './render/track-mesh'
+import { startPose } from './track/geometry'
 import type { Track } from './track/schema'
 
 const CAMERA_HEIGHT_M = 8
@@ -26,7 +27,7 @@ async function main(): Promise<void> {
   const carMesh = buildCar()
   scene.add(carMesh)
 
-  const vehicle = new Vehicle()
+  const vehicle = new Vehicle(undefined, startPose(track))
   const input = new KeyboardInput()
   let acc: Accumulator = { pending: 0 }
   let last = performance.now()
