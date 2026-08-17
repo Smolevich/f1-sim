@@ -38,10 +38,6 @@ const SUSPENSION_STIFFNESS = 90_000
 const SUSPENSION_DAMPING = 6_000
 const MAX_STEER_RAD = 0.3
 const BRAKE_FORCE_N = 28_000
-// Слип, на котором Magic Formula из tyres.ts достигает пика: sin(1.9·atan(10·s))
-// максимальна при s = tan(π/3.8)/10. Запрошенную тягу отображаем в этот отрезок,
-// чтобы полное сцепление отвечало полному пределу шины, а не срыву за пиком.
-const SLIP_AT_GRIP_LIMIT = 0.1086
 // Проскальзывание, эквивалентное полной загрузке пятна контакта: при нём
 // равновесие тепловой модели tyres.ts (90·s = 0.6·(T−25)) даёт рабочие 100 °C.
 const WORKING_SLIP = 0.5
@@ -57,6 +53,10 @@ const ROAD_HEAT_SPEED_MS = 30
 // порог опрокидывания выходит ~1.5 g, ниже предела шин, и болид кувыркается
 // в каждом повороте вместо того, чтобы скользить.
 const ROLL_CENTRE_M = 0.1
+// Знаменатель угла увода — не «плюс метр в секунду»: метровый пол завышает угол
+// на малой скорости, где продольная составляющая сама порядка единиц, и болид
+// срывается тем сильнее, чем медленнее едет. Достаточно защиты от деления на нуль.
+const SLIP_DENOM_FLOOR_MS = 0.1
 // WHEEL_RADIUS_M импортируется из drivetrain: радиус колеса один и тот же
 // и для оборотов, и для перевода момента в силу — разъехавшись, они дадут
 // молча несогласованные тягу и передачи.
@@ -75,6 +75,8 @@ export class Vehicle {
   private aero: AeroSetup = { frontWing: 0.5, rearWing: 0.5 }
   /** Вертикальная нагрузка на каждое колесо за последний шаг, ньютоны. */
   readonly wheelLoads: number[] = [0, 0, 0, 0]
+  /** Боковая сила каждого колеса за прошлый шаг: из неё считается предел диффа. */
+  private readonly lateralForces: number[] = [0, 0, 0, 0]
 
   constructor(aero?: AeroSetup, start?: VehicleStart) {
     if (aero) this.aero = aero
@@ -136,6 +138,26 @@ export class Vehicle {
     const rpm = rpmFor(speedMs, gear)
     const steerRad = clamp(input.steer, -1, 1) * MAX_STEER_RAD
 
+    // Открытый дифференциал: он не может дать загруженному колесу больше момента,
+    // чем принимает разгруженное. Без этого предела внутреннее заднее колесо в
+    // повороте выдаёт тягу, которой физически не держит, и разница между колёсами
+    // становится моментом рыскания, разворачивающим болид.
+    //
+    // Предел — остаток круга трения после боковой силы, а не весь круг: тяга,
+    // забравшая круг целиком, оставляет разгруженное колесо без боковой силы,
+    // и задняя ось перестаёт держать курс именно там, где это нужнее всего.
+    // Боковая сила и нагрузки берутся с прошлого шага: на текущем они ещё не
+    // измерены, а за 1/120 с меняются несопоставимо меньше, чем разброс
+    // между колёсами.
+    const drivenGrip = WHEEL_OFFSETS
+      .map((wheel, i) => {
+        if (!wheel.driven) return Infinity
+        const limit = this.wheelLoads[i] * gripFactor(this.tyres[i])
+        const lateral = Math.min(Math.abs(this.lateralForces[i]), limit)
+        return Math.sqrt(Math.max(0, limit * limit - lateral * lateral))
+      })
+      .reduce((min, value) => Math.min(min, value), Infinity)
+
     WHEEL_OFFSETS.forEach((wheel, i) => {
       const anchor = this.body.translation()
       const offset = rotate({ x: wheel.x, y: 0, z: wheel.z }, rotation)
@@ -152,6 +174,7 @@ export class Vehicle {
         ray, SUSPENSION_TRAVEL_M, true, undefined, undefined, undefined, this.body,
       )
       this.wheelLoads[i] = 0
+      this.lateralForces[i] = 0
       if (!hit) return
 
       const compression = SUSPENSION_TRAVEL_M - hit.timeOfImpact
@@ -184,39 +207,36 @@ export class Vehicle {
       const latVel = wheelVelX * wheelRight.x + wheelVelZ * wheelRight.z
 
       const driveN = wheel.driven
-        ? (wheelTorque(rpm, gear, input.throttle) / WHEEL_RADIUS_M) / 2
+        ? Math.min(
+            (wheelTorque(rpm, gear, input.throttle) / WHEEL_RADIUS_M) / 2,
+            drivenGrip,
+          )
         : 0
       const brakeN = clamp(input.brake, 0, 1) * BRAKE_FORCE_N / 4
 
-      // Слип — безразмерная величина: насколько запрошенная тяга превышает то,
-      // что колесо способно передать. Пока она в пределах сцепления, слип мал и
-      // Magic Formula отдаёт всю тягу; за пределом слип растёт, и начинается
-      // пробуксовка. Считать его отношением сил (driveN/load) нельзя — это
-      // сразу упирает слип в единицу и держит колесо в вечном букс.
       const gripLimitN = load * gripFactor(this.tyres[i])
-      const slipAngle = Math.atan2(latVel, Math.abs(longVel) + 1)
+      const slipAngle = Math.atan2(latVel, Math.abs(longVel) + SLIP_DENOM_FLOOR_MS)
 
-      // Круг трения делится по фактической силе, а не по углу увода: угол за
-      // пиком означает, что шина уже скользит, а не что она израсходовала весь
-      // круг. От угла бюджет обнулялся после пика — ведущие колёса теряли всю
-      // тягу, сохраняя боковую силу, и болид разворачивало от любого газа.
-      const lateralOnly = tyreForce(this.tyres[i], 0, slipAngle, load)
-      const lateralUse = gripLimitN > 0
-        ? Math.min(1, Math.abs(lateralOnly.lateral) / gripLimitN)
-        : 0
-      const longBudgetN = gripLimitN * Math.sqrt(Math.max(0, 1 - lateralUse * lateralUse))
-      const slipRatio = longBudgetN > 0
-        ? clamp(driveN / longBudgetN, -1, 1) * SLIP_AT_GRIP_LIMIT
-        : 0
-
-      const force = tyreForce(this.tyres[i], slipRatio, slipAngle, load)
-      // Тяга не может превысить ни запрошенное двигателем, ни предел шины.
-      const tractionN = Math.sign(driveN) * Math.min(
-        Math.abs(driveN),
-        Math.abs(force.longitudinal),
+      // Круг трения делится в пользу боковой силы: сколько требует угол увода,
+      // столько она и берёт, тяге достаётся остаток. Обратный порядок оставляет
+      // разгруженное внутреннее колесо вообще без боковой силы — тяга съедает
+      // весь его круг, задняя ось перестаёт держать курс, и болид разворачивает.
+      // Именно боковая сила возвращает машину на курс, поэтому приоритет её.
+      const lateralFullN = tyreForce(this.tyres[i], 0, slipAngle, load).lateral
+      const latN = -Math.sign(lateralFullN) * Math.min(Math.abs(lateralFullN), gripLimitN)
+      // Продольный остаток круга делят тяга и тормоз: колесо не может передать
+      // больше сцепления, чем у него есть, ни разгоняя, ни замедляя. Без этого
+      // предела тормоз выдаёт полную колодочную силу на сорванной шине, и
+      // отношение силы к сцеплению уходит в бесконечность вместе с её нагревом.
+      const longCapN = Math.sqrt(Math.max(0, gripLimitN * gripLimitN - latN * latN))
+      const tractionN = wheel.driven ? driveN : 0
+      const longN = clamp(
+        tractionN - Math.sign(longVel) * brakeN,
+        -longCapN,
+        longCapN,
       )
-      const longN = tractionN - Math.sign(longVel) * brakeN
-      const latN = -force.lateral
+      const force = { longitudinal: longN, lateral: latN }
+      this.lateralForces[i] = latN
 
       // Сила шины приложена не на высоте ступицы, иначе плечо крена нулевое,
       // нагрузка на всех колёсах одинаковая и баланса перед/зад не существует.

@@ -85,6 +85,57 @@ test('болид не разворачивает при умеренном ру�
   expect(maxSideslip).toBeLessThan(30)
 })
 
+// Разворот появлялся между 0.10 и 0.15 руля обрывом, а не плавно: ведущее колесо
+// забирало весь круг трения под тягу и оставалось без боковой силы. Проверяем
+// именно тот участок руля, на котором болид был неуправляем.
+test('умеренный руль под газом не срывает болид на любом угле', () => {
+  for (const steer of [0.15, 0.2, 0.3]) {
+    const v = new Vehicle()
+    run(v, full, 3)
+
+    let maxSideslip = 0
+    for (let i = 0; i < 5 / FIXED_STEP; i++) {
+      v.step({ throttle: 0.5, brake: 0, steer, gear: 0, drs: false }, FIXED_STEP)
+      maxSideslip = Math.max(maxSideslip, sideslipDeg(v))
+    }
+    expect(maxSideslip, `руль ${steer}`).toBeLessThan(15)
+  }
+})
+
+// Разворот был тем сильнее, чем медленнее едет болид (замеряли 74° на 60 км/ч),
+// то есть ровно наоборот к реальной машине: на малой скорости метровый пол в
+// знаменателе завышал угол увода. Поворот должен держаться на любой скорости.
+test('поворот под газом держится на любой скорости входа', () => {
+  for (const entryKmh of [60, 90, 120, 150, 180]) {
+    const v = new Vehicle()
+    for (let i = 0; i < 20 / FIXED_STEP; i++) {
+      if (v.telemetry().speedMs * 3.6 >= entryKmh) break
+      v.step(full, FIXED_STEP)
+    }
+
+    let maxSideslip = 0
+    for (let i = 0; i < 5 / FIXED_STEP; i++) {
+      v.step({ throttle: 0.4, brake: 0, steer: 0.2, gear: 0, drs: false }, FIXED_STEP)
+      maxSideslip = Math.max(maxSideslip, sideslipDeg(v))
+    }
+    expect(maxSideslip, `вход ${entryKmh} км/ч`).toBeLessThan(15)
+  }
+})
+
+// Тормоз, не ограниченный кругом трения, выдавал полную колодочную силу на
+// сорванной шине: отношение силы к сцеплению уходило в бесконечность, вместе с
+// ним температура шины, а следом в NaN — вся поза болида.
+test('торможение в повороте до остановки не ломает симуляцию', () => {
+  const v = new Vehicle()
+  run(v, full, 4)
+  run(v, { throttle: 0, brake: 0.6, steer: 0.15, gear: 0, drs: false }, 4)
+
+  const { position, speedMs } = v.telemetry()
+  expect(Number.isFinite(speedMs)).toBe(true)
+  expect(Number.isFinite(position.x) && Number.isFinite(position.z)).toBe(true)
+  for (const tyre of v.tyreStates()) expect(tyre.tempC).toBeLessThan(200)
+})
+
 test('все четыре шины выходят на рабочую температуру', () => {
   const track = monza()
   const v = new Vehicle(undefined, startPose(track))
