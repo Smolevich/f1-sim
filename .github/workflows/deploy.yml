@@ -73,7 +73,3 @@ jobs:
             sudo nginx -t
             sudo systemctl reload nginx
             rm -rf /tmp/deploy-f1-sim
-```
-```yaml
-  - hostname: games.smolevich.com
-    service: http://localhost:80
