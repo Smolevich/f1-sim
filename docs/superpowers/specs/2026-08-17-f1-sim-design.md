@@ -41,16 +41,18 @@ games.smolevich.com  → CNAME на туннель telegram-bot
 - **Access не вешаем**: игра публичная
 
 Статику раздаёт nginx — по правилу из `server-facts.md` прослойка нужна ровно
-там, где есть файлы с диска, и это наш случай. API живёт отдельным сервисом на
-своём порту, cloudflared разводит по пути:
+там, где есть файлы с диска, и это наш случай. **Он же проксирует `/api/`** в
+uvicorn, поэтому в туннеле нужна одна строка ingress, а не разводка по путям:
 
 ```yaml
 - hostname: games.smolevich.com
-  path: ^/api/
-  service: http://127.0.0.1:8095
-- hostname: games.smolevich.com
   service: http://localhost:80
 ```
+
+Вхост берётся из готового шаблона `hetzner/nginx/app.conf.template`
+(`__APP__=f1-sim`, `__HOST__=games.smolevich.com`, `__API_PORT__=8095`) — в нём
+уже есть блок `/api/`, восстановление реального IP из `CF-Connecting-IP` и
+кэш-заголовки для `/assets/`.
 
 Правка ingress идёт в репо `hetzner` и деплоится оттуда, не руками на сервере.
 
