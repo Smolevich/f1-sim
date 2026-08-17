@@ -14,14 +14,22 @@ type CompoundSpec = {
 }
 
 const COMPOUNDS: Record<TyreCompound, CompoundSpec> = {
-  soft: { peakGrip: 1.75, optimalTempC: 95, tempWindow: 30, wearRate: 4.0e-4 },
-  medium: { peakGrip: 1.6, optimalTempC: 100, tempWindow: 35, wearRate: 2.5e-4 },
-  hard: { peakGrip: 1.45, optimalTempC: 110, tempWindow: 40, wearRate: 1.6e-4 },
+  soft: { peakGrip: 1.75, optimalTempC: 95, tempWindow: 45, wearRate: 4.0e-4 },
+  medium: { peakGrip: 1.6, optimalTempC: 100, tempWindow: 50, wearRate: 2.5e-4 },
+  hard: { peakGrip: 1.45, optimalTempC: 110, tempWindow: 55, wearRate: 1.6e-4 },
 }
 
 const HEATING = 90
-const COOLING = 0.6
+// Охлаждение растёт с перегревом быстрее линейного: шина отдаёт тепло в диск и
+// обод, и чем она горячее, тем интенсивнее. Прежний линейный отвод давал
+// равновесие за 130 °C, где сцепление почти нулевое — машина глохла посреди
+// заезда. Деление на 75^(exp−1) нормирует кривую так, что около 100 °C отвод
+// совпадает с прежним линейным, иначе сломался бы прогрев на прямой.
+const COOLING = 0.75
+const COOLING_EXPONENT = 1.35
 const AMBIENT_C = 25
+/** Перегрев, на котором новая кривая охлаждения сшивается со старой линейной. */
+const COOLING_REFERENCE_C = 75
 
 /** Множитель сцепления с учётом состава, температуры и износа. */
 export function gripFactor(state: TyreState): number {
@@ -68,10 +76,14 @@ function magicFormula(slip: number, stiffness: number): number {
 export function updateTyre(state: TyreState, slipMagnitude: number, dt: number): TyreState {
   const spec = COMPOUNDS[state.compound]
   const heating = HEATING * Math.abs(slipMagnitude)
-  const cooling = COOLING * (state.tempC - AMBIENT_C)
+  const excess = Math.max(0, state.tempC - AMBIENT_C)
+  const cooling = COOLING * Math.pow(excess, COOLING_EXPONENT)
+    / Math.pow(COOLING_REFERENCE_C, COOLING_EXPONENT - 1)
   return {
     compound: state.compound,
-    tempC: state.tempC + (heating - cooling) * dt,
+    // Нижняя граница — окружающая температура: остыть ниже воздуха шина не может,
+    // а перелёт за один шаг иначе загонял бы её в минус на крупном dt.
+    tempC: Math.max(AMBIENT_C, state.tempC + (heating - cooling) * dt),
     wear: Math.min(1, state.wear + spec.wearRate * Math.abs(slipMagnitude) * dt),
   }
 }

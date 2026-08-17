@@ -48,3 +48,36 @@ test('разгруженное колесо не передаёт силу', () 
   const f = tyreForce(fresh(), 1, Math.PI / 4, -4000)
   expect(Math.hypot(f.longitudinal, f.lateral)).toBe(0)
 })
+
+test('шина не уходит в перегрев при постоянном скольжении', () => {
+  let s = fresh()
+  // минута непрерывного бокового скольжения — худший случай в заезде
+  for (let i = 0; i < 60 / (1 / 120); i++) s = updateTyre(s, 0.5, 1 / 120)
+  expect(s.tempC).toBeLessThan(120)
+})
+
+// Регрессия на баг «машина глохнет посреди круга»: в затяжном повороте по Монце
+// шина упиралась в 141 °C со сцеплением 0.40, и болид останавливался на полотне.
+// Проверяем не абстрактную «половину скольжения», а тот режим, который и убивал
+// заезд: длительное сильное скольжение обязано оставлять машину едущей.
+test('затяжное сильное скольжение не обнуляет сцепление', () => {
+  let s = fresh()
+  for (let i = 0; i < 60 / (1 / 120); i++) s = updateTyre(s, 1, 1 / 120)
+  expect(s.tempC).toBeLessThan(135)
+  expect(gripFactor(s)).toBeGreaterThan(1)
+})
+
+test('перегретая шина сохраняет часть сцепления', () => {
+  // даже на верхней границе окна машина должна ехать, а не глохнуть
+  expect(gripFactor({ compound: 'medium', tempC: 125, wear: 0 })).toBeGreaterThan(0.9)
+})
+
+test('холодная шина всё ещё держит хуже прогретой', () => {
+  expect(gripFactor(fresh({ tempC: 40 }))).toBeLessThan(gripFactor(fresh()))
+})
+
+test('шина остывает быстрее, когда сильно перегрета', () => {
+  const hot = updateTyre({ compound: 'medium', tempC: 140, wear: 0 }, 0, 1)
+  const warm = updateTyre({ compound: 'medium', tempC: 105, wear: 0 }, 0, 1)
+  expect(140 - hot.tempC).toBeGreaterThan(105 - warm.tempC)
+})
