@@ -12,6 +12,7 @@ import { LeaderboardPanel } from './render/leaderboard-panel'
 import { askName } from './render/menu'
 import { createScene } from './render/scene'
 import { buildStartLine, buildTrackLines, buildTrackMesh } from './render/track-mesh'
+import { buildBarriers, buildKerbs } from './render/trackside'
 import {
   loadBest, loadGhost, loadName, saveBest, saveGhost, saveName,
 } from './storage/local'
@@ -37,6 +38,8 @@ async function main(): Promise<void> {
   scene.add(buildTrackMesh(track))
   scene.add(buildTrackLines(track))
   scene.add(buildStartLine(track))
+  scene.add(buildKerbs(track))
+  scene.add(buildBarriers(track))
 
   const carMesh = buildCar()
   scene.add(carMesh)

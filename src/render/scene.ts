@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { makeGrassTexture } from './textures'
 
 export function createScene(canvas: HTMLCanvasElement): {
   scene: THREE.Scene
@@ -25,12 +26,14 @@ export function createScene(canvas: HTMLCanvasElement): {
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(10_000, 10_000),
     new THREE.MeshStandardMaterial({
-      color: 0x4a7c3f,
+      map: makeGrassTexture(),
+      roughness: 1,
       polygonOffset: true,
       polygonOffsetFactor: 1,
       polygonOffsetUnits: 1,
     }),
   )
+  ground.receiveShadow = true
   ground.rotation.x = -Math.PI / 2
   ground.position.y = -0.3
   scene.add(ground)
