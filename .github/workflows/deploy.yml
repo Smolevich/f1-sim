@@ -65,7 +65,13 @@ jobs:
           script: |
             set -e
             sudo mkdir -p /var/www/f1-sim
-            sudo rsync -a --delete /tmp/deploy-f1-sim/dist/ /var/www/f1-sim/
+            # --no-perms --no-owner: без них rsync тащит права и владельца с
+            # раннера, каталог приезжает как drwxr-x--- root, и nginx (www-data)
+            # не может в него войти — статика отдаётся как 403.
+            sudo rsync -a --delete --no-perms --no-owner --no-group \
+              --chmod=D755,F644 /tmp/deploy-f1-sim/dist/ /var/www/f1-sim/
+            sudo chown -R root:root /var/www/f1-sim
+            sudo chmod 755 /var/www/f1-sim
             sudo install -m 0644 /tmp/deploy-f1-sim/deploy/nginx-f1-sim.conf \
               /etc/nginx/sites-available/f1-sim.conf
             sudo ln -sfn /etc/nginx/sites-available/f1-sim.conf \
