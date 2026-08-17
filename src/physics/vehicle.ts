@@ -57,6 +57,10 @@ const ROLL_CENTRE_M = 0.1
 // на малой скорости, где продольная составляющая сама порядка единиц, и болид
 // срывается тем сильнее, чем медленнее едет. Достаточно защиты от деления на нуль.
 const SLIP_DENOM_FLOOR_MS = 0.1
+// Замедление на газоне. Сопоставимо с торможением двигателем на асфальте и
+// заметно слабее тормозов (28 кН / 798 кг ≈ 35 м/с²): вылет должен стоить
+// времени, но не выбрасывать болид из заезда.
+const OFF_TRACK_DECEL_MS2 = 8
 // WHEEL_RADIUS_M импортируется из drivetrain: радиус колеса один и тот же
 // и для оборотов, и для перевода момента в силу — разъехавшись, они дадут
 // молча несогласованные тягу и передачи.
@@ -286,6 +290,16 @@ export class Vehicle {
 
     this.world.timestep = dt
     this.world.step()
+  }
+
+  /** Сопротивление газона: тормозит болид, пока он вне полотна. */
+  applyOffTrackDrag(dt: number): void {
+    const v = this.body.linvel()
+    const speed = Math.hypot(v.x, v.z)
+    if (speed < 0.5) return
+    const decel = OFF_TRACK_DECEL_MS2 * dt
+    const k = Math.max(0, 1 - decel / speed)
+    this.body.setLinvel({ x: v.x * k, y: v.y, z: v.z * k }, true)
   }
 
   telemetry(): CarTelemetry {

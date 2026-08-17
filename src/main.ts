@@ -88,6 +88,10 @@ async function main(): Promise<void> {
 
       const telemetry = vehicle.telemetry()
       const onTrack = isOnTrack(track, telemetry.position)
+      // На газоне держит хуже, чем на асфальте: вылет должен стоить времени,
+      // иначе выгоднее резать повороты напрямик.
+      if (!onTrack) vehicle.applyOffTrackDrag(FIXED_STEP)
+
       const lapMs = sessionMs - (lap.startedAtMs ?? sessionMs)
       recorder.record(lapMs, telemetry.position, vehicle.orientation())
 

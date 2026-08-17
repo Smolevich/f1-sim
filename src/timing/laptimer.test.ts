@@ -86,6 +86,21 @@ test('срезка делает круг невалидным', () => {
   expect(completed!.valid).toBe(false)
 })
 
+test('срезка не отмывается чистым остатком круга', () => {
+  const t = ring()
+  let s = createLapState()
+  let completed = null
+  // выезд в первом секторе, дальше всё чисто
+  for (const [f, ms, on] of [
+    [0.1, 0, false], [0.5, 30_000, true], [0.9, 60_000, true], [0.05, 90_000, true],
+  ] as const) {
+    const r = updateLap(s, t, at(t, f), ms, on)
+    s = r.state
+    if (r.completed) completed = r.completed
+  }
+  expect(completed!.valid).toBe(false)
+})
+
 test('чистый круг остаётся валидным', () => {
   const t = ring()
   let s = createLapState()
