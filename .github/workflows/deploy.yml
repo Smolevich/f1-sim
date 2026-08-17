@@ -100,14 +100,19 @@ jobs:
             sudo mkdir -p /opt/f1-sim/api /opt/f1-sim/data /etc/f1-sim
             sudo cp -a /tmp/deploy-f1-sim/api/. /opt/f1-sim/api/
             sudo chown -R root:root /opt/f1-sim/api
-            sudo find /opt/f1-sim/api -type d -exec chmod 755 {} +
-            sudo find /opt/f1-sim/api -type f -exec chmod 644 {} +
+            # .venv исключён: он не из репозитория, а chmod 644 на повторном
+            # деплое снимает бит выполнения с uvicorn, и юнит падает с 203/EXEC.
+            sudo find /opt/f1-sim/api -path /opt/f1-sim/api/.venv -prune -o \
+              -type d -exec chmod 755 {} +
+            sudo find /opt/f1-sim/api -path /opt/f1-sim/api/.venv -prune -o \
+              -type f -exec chmod 644 {} +
 
             if ! command -v uv >/dev/null; then
               curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin sh
             fi
             cd /opt/f1-sim/api
             sudo uv sync --no-dev
+            sudo chmod 755 /opt/f1-sim/api/.venv/bin/*
 
             # Соль для хеша IP — из Vault, не из gh-secrets и не из репо.
             export VAULT_ADDR=http://127.0.0.1:8200
