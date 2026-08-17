@@ -13,6 +13,15 @@ const BARRIER_OFFSET_M = 2.5
 const KERB_STRIPE_M = 2
 
 /**
+ * Сколько красно-белых пар укладывается в сегмент такой длины. Округление вверх,
+ * а не к ближайшему: Math.round на сегменте короче полутора полос давал одну пару
+ * на несколько метров, и поребрик читался сплошной лентой вместо чередования.
+ */
+export function stripeSpan(segmentLengthM: number): number {
+  return Math.max(1, Math.ceil(segmentLengthM / KERB_STRIPE_M))
+}
+
+/**
  * Кривизна в узле — угол между направлением входа и выхода. Меряется по
  * нормированным направлениям, потому что соседние сегменты OSM различаются по
  * длине на два порядка, и разность сырых векторов дала бы кривизну прямой.
@@ -55,9 +64,7 @@ export function buildKerbs(track: Track): THREE.Mesh {
     const j = (i + 1) % n
     // Длина сегмента задаёт число полос: при фиксированном UV полосы растянулись
     // бы на длинных сегментах и слиплись на коротких (шаг узлов от 2 до 190 м).
-    const span = Math.max(1, Math.round(
-      Math.hypot(cl[j].x - cl[i].x, cl[j].z - cl[i].z) / KERB_STRIPE_M,
-    ))
+    const span = stripeSpan(Math.hypot(cl[j].x - cl[i].x, cl[j].z - cl[i].z))
     for (const edge of [left, right]) {
       const outward0 = away(edge[i], cl[i], KERB_WIDTH_M)
       const outward1 = away(edge[j], cl[j], KERB_WIDTH_M)
