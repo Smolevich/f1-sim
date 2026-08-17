@@ -1,11 +1,11 @@
 import RAPIER from '@dimforge/rapier3d-compat'
-import * as THREE from 'three'
 import { GhostRecorder, sampleGhost, type GhostLap } from './ghost/recorder'
 import { KeyboardInput } from './input/keyboard'
 import { submitLap } from './net/leaderboard'
 import { Vehicle } from './physics/vehicle'
 import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
-import { buildCar } from './render/car'
+import { buildCarParts, spinWheels } from './render/car'
+import { cameraPose, nextMode, type CameraMode } from './render/cameras'
 import { buildGhostCar } from './render/ghost-car'
 import { Hud } from './render/hud'
 import { LeaderboardPanel } from './render/leaderboard-panel'
@@ -22,9 +22,6 @@ import {
 import { isOnTrack, startPose } from './track/geometry'
 import type { Track } from './track/schema'
 
-const CAMERA_HEIGHT_M = 7
-const CAMERA_BACK_M = 17
-
 async function main(): Promise<void> {
   await RAPIER.init()
 
@@ -33,7 +30,7 @@ async function main(): Promise<void> {
   document.body.style.overflow = 'hidden'
   document.body.appendChild(canvas)
 
-  const { scene, camera, renderer } = createScene(canvas)
+  const { scene, camera, renderer, sun } = createScene(canvas)
   const track: Track = await fetch('/tracks/monza.json').then((r) => r.json())
   scene.add(buildTrackMesh(track))
   scene.add(buildTrackLines(track))
@@ -41,7 +38,8 @@ async function main(): Promise<void> {
   scene.add(buildKerbs(track))
   scene.add(buildBarriers(track))
 
-  const carMesh = buildCar()
+  const carParts = buildCarParts()
+  const carMesh = carParts.group
   scene.add(carMesh)
   const ghostMesh = buildGhostCar()
   ghostMesh.visible = false
@@ -73,8 +71,10 @@ async function main(): Promise<void> {
     recorder.reset()
   }
 
+  let cameraMode: CameraMode = 'chase'
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyR') reset()
+    if (e.code === 'KeyC') cameraMode = nextMode(cameraMode)
   })
 
   const frame = (now: number): void => {
@@ -85,9 +85,11 @@ async function main(): Promise<void> {
     acc = result.acc
 
     let drs = false
+    let lastSteer = 0
     for (let i = 0; i < result.steps; i++) {
       const controls = input.read(FIXED_STEP)
       drs = controls.drs
+      lastSteer = controls.steer
       vehicle.step(controls, FIXED_STEP)
       sessionMs += FIXED_STEP * 1000
 
@@ -129,6 +131,7 @@ async function main(): Promise<void> {
     const orientation = vehicle.orientation()
     carMesh.position.set(telemetry.position.x, telemetry.position.y, telemetry.position.z)
     carMesh.quaternion.set(orientation.x, orientation.y, orientation.z, orientation.w)
+    spinWheels(carParts, telemetry.speedMs, lastSteer, frameSeconds)
 
     const lapMs = sessionMs - (lap.startedAtMs ?? sessionMs)
 
@@ -146,14 +149,20 @@ async function main(): Promise<void> {
       2 * (orientation.w * orientation.y + orientation.x * orientation.z),
       1 - 2 * (orientation.y * orientation.y + orientation.z * orientation.z),
     )
-    camera.position.set(
-      telemetry.position.x - Math.sin(heading) * CAMERA_BACK_M,
-      telemetry.position.y + CAMERA_HEIGHT_M,
-      telemetry.position.z - Math.cos(heading) * CAMERA_BACK_M,
-    )
-    camera.lookAt(new THREE.Vector3(
-      telemetry.position.x, telemetry.position.y + 1, telemetry.position.z,
-    ))
+    const pose = cameraPose(cameraMode, telemetry.position, heading, telemetry.speedMs)
+    camera.position.set(pose.eye.x, pose.eye.y, pose.eye.z)
+    camera.lookAt(pose.look.x, pose.look.y, pose.look.z)
+    if (Math.abs(camera.fov - pose.fov) > 0.1) {
+      camera.fov = pose.fov
+      camera.updateProjectionMatrix()
+    }
+
+    // Карта теней покрывает только окрестность болида, поэтому её источник
+    // едет следом — иначе тень пропадает через сотню метров от старта.
+    sun.target.position.set(telemetry.position.x, 0, telemetry.position.z)
+    sun.position.set(telemetry.position.x + 300, 500, telemetry.position.z + 200)
+    // Болид не рисуем из кокпита: изнутри виден только затылок собственного шлема.
+    carMesh.visible = cameraMode !== 'cockpit'
 
     const fraction = progressFraction(track, telemetry.position)
     const tyres = vehicle.tyreStates()
