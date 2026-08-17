@@ -2,7 +2,8 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { downforce, drag, type AeroSetup } from './aero'
 import { bestGear, rpmFor, wheelTorque, WHEEL_RADIUS_M } from './drivetrain'
 import { gripFactor, tyreForce, updateTyre, type TyreState } from './tyres'
-import type { TrackPoint } from '../track/schema'
+import { buildEdges } from '../track/geometry'
+import type { Track, TrackPoint } from '../track/schema'
 
 export type CarInput = {
   throttle: number
@@ -61,6 +62,12 @@ const SLIP_DENOM_FLOOR_MS = 0.1
 // заметно слабее тормозов (28 кН / 798 кг ≈ 35 м/с²): вылет должен стоить
 // времени, но не выбрасывать болид из заезда.
 const OFF_TRACK_DECEL_MS2 = 8
+// Отступ и высота повторяют отрисовку в trackside.ts: физическая стенка должна
+// стоять там же, где нарисованная, иначе болид упирается в воздух или проезжает
+// сквозь железо.
+const BARRIER_OFFSET_M = 6
+const BARRIER_HEIGHT_M = 1.4
+const BARRIER_THICKNESS_M = 0.3
 // WHEEL_RADIUS_M импортируется из drivetrain: радиус колеса один и тот же
 // и для оборотов, и для перевода момента в силу — разъехавшись, они дадут
 // молча несогласованные тягу и передачи.
@@ -82,12 +89,14 @@ export class Vehicle {
   /** Боковая сила каждого колеса за прошлый шаг: из неё считается предел диффа. */
   private readonly lateralForces: number[] = [0, 0, 0, 0]
 
-  constructor(aero?: AeroSetup, start?: VehicleStart) {
+  constructor(aero?: AeroSetup, start?: VehicleStart, track?: Track) {
     if (aero) this.aero = aero
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 })
 
     const ground = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed())
     this.world.createCollider(RAPIER.ColliderDesc.cuboid(5000, 0.1, 5000), ground)
+
+    if (track) this.buildBarrierColliders(track)
 
     // Без стартовой позы болид появляется в начале координат — так его ставят
     // тесты физики на плоском полигоне. В игре позу задаёт трасса, иначе машина
@@ -108,6 +117,41 @@ export class Vehicle {
     )
 
     this.tyres = WHEEL_OFFSETS.map(() => ({ compound: 'medium', tempC: 90, wear: 0 }))
+  }
+
+  /**
+   * Стенка вдоль каждой стороны трассы: по кубоиду на сегмент. Статические
+   * коллайдеры Rapier дёшевы, а альтернатива — trimesh на всю трассу — хуже
+   * ловит скользящие удары под малым углом.
+   */
+  private buildBarrierColliders(track: Track): void {
+    const { left, right } = buildEdges(track)
+    const cl = track.centerline
+    const n = cl.length
+
+    for (const edge of [left, right]) {
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n
+        const a = outward(edge[i], cl[i], BARRIER_OFFSET_M)
+        const b = outward(edge[j], cl[j], BARRIER_OFFSET_M)
+        const length = Math.hypot(b.x - a.x, b.z - a.z)
+        if (length < 0.01) continue
+
+        const body = this.world.createRigidBody(
+          RAPIER.RigidBodyDesc.fixed().setTranslation(
+            (a.x + b.x) / 2,
+            BARRIER_HEIGHT_M / 2,
+            (a.z + b.z) / 2,
+          ).setRotation(yawQuaternion(Math.atan2(b.x - a.x, b.z - a.z))),
+        )
+        this.world.createCollider(
+          RAPIER.ColliderDesc.cuboid(BARRIER_THICKNESS_M / 2, BARRIER_HEIGHT_M / 2, length / 2)
+            .setRestitution(0.1)
+            .setFriction(0.4),
+          body,
+        )
+      }
+    }
   }
 
   step(input: CarInput, dt: number): void {
@@ -359,6 +403,14 @@ function rotateY(v: Vec3, angle: number): Vec3 {
   const c = Math.cos(angle)
   const s = Math.sin(angle)
   return { x: v.x * c - v.z * s, y: v.y, z: v.x * s + v.z * c }
+}
+
+/** Точка, отодвинутая от осевой наружу на заданное расстояние. */
+function outward(from: TrackPoint, centre: TrackPoint, meters: number): TrackPoint {
+  const dx = from.x - centre.x
+  const dz = from.z - centre.z
+  const d = Math.hypot(dx, dz) || 1
+  return { x: from.x + (dx / d) * meters, y: from.y, z: from.z + (dz / d) * meters }
 }
 
 function clamp(value: number, min: number, max: number): number {

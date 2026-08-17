@@ -54,7 +54,9 @@ async function main(): Promise<void> {
   const input = new KeyboardInput()
   const recorder = new GhostRecorder()
 
-  let vehicle = new Vehicle(undefined, startPose(track))
+  const makeVehicle = (): Vehicle => new Vehicle(undefined, startPose(track), track)
+
+  let vehicle = makeVehicle()
   let lap: LapState = createLapState()
   let best = loadBest(track.meta.id)
   let ghost: GhostLap | null = loadGhost(track.meta.id)
@@ -66,7 +68,7 @@ async function main(): Promise<void> {
   let last = performance.now()
 
   const reset = (): void => {
-    vehicle = new Vehicle(undefined, startPose(track))
+    vehicle = makeVehicle()
     lap = createLapState()
     recorder.reset()
   }
