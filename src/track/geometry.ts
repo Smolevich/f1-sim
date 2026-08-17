@@ -1,0 +1,67 @@
+import type { Track, TrackPoint } from './schema'
+
+export type TrackEdges = {
+  left: TrackPoint[]
+  right: TrackPoint[]
+}
+
+/** Края полотна: отступ на полширины по нормали к направлению движения. */
+export function buildEdges(track: Track): TrackEdges {
+  const half = track.widthM / 2
+  const left: TrackPoint[] = []
+  const right: TrackPoint[] = []
+
+  const n = track.centerline.length
+  for (let i = 0; i < n; i++) {
+    const prev = track.centerline[(i - 1 + n) % n]
+    const next = track.centerline[(i + 1) % n]
+    const dx = next.x - prev.x
+    const dz = next.z - prev.z
+    const len = Math.hypot(dx, dz) || 1
+    const nx = -dz / len
+    const nz = dx / len
+    const c = track.centerline[i]
+    left.push({ x: c.x + nx * half, y: c.y, z: c.z + nz * half })
+    right.push({ x: c.x - nx * half, y: c.y, z: c.z - nz * half })
+  }
+
+  return { left, right }
+}
+
+/** Пройденная дистанция от точки старта до узла index, метры. */
+export function distanceAlong(track: Track, index: number): number {
+  let total = 0
+  for (let i = 0; i < index; i++) {
+    const a = track.centerline[i]
+    const b = track.centerline[i + 1]
+    if (!b) break
+    total += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+  }
+  return total
+}
+
+/**
+ * Точка на полотне, если расстояние до ближайшего сегмента осевой не больше
+ * полширины. Это же правило ловит срезки: ушёл дальше — круг не засчитан.
+ */
+export function isOnTrack(track: Track, point: TrackPoint): boolean {
+  const half = track.widthM / 2
+  const n = track.centerline.length
+  let best = Infinity
+  for (let i = 0; i < n; i++) {
+    const a = track.centerline[i]
+    const b = track.centerline[(i + 1) % n]
+    best = Math.min(best, distanceToSegment(point, a, b))
+    if (best <= half) return true
+  }
+  return best <= half
+}
+
+function distanceToSegment(p: TrackPoint, a: TrackPoint, b: TrackPoint): number {
+  const dx = b.x - a.x
+  const dz = b.z - a.z
+  const lengthSq = dx * dx + dz * dz
+  if (lengthSq === 0) return Math.hypot(p.x - a.x, p.z - a.z)
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq))
+  return Math.hypot(p.x - (a.x + t * dx), p.z - (a.z + t * dz))
+}
