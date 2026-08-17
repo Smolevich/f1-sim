@@ -42,9 +42,6 @@ const BRAKE_FORCE_N = 28_000
 // максимальна при s = tan(π/3.8)/10. Запрошенную тягу отображаем в этот отрезок,
 // чтобы полное сцепление отвечало полному пределу шины, а не срыву за пиком.
 const SLIP_AT_GRIP_LIMIT = 0.1086
-// Угол увода, на котором боковая формула из tyres.ts выходит на пик:
-// sin(1.9·atan(8·a/(π/2))) максимальна при a = (π/2)·tan(π/3.8)/8 ≈ 12.2°.
-const SLIP_ANGLE_AT_PEAK = (Math.PI / 2) * Math.tan(Math.PI / 3.8) / 8
 // Проскальзывание, эквивалентное полной загрузке пятна контакта: при нём
 // равновесие тепловой модели tyres.ts (90·s = 0.6·(T−25)) даёт рабочие 100 °C.
 const WORKING_SLIP = 0.5
@@ -199,11 +196,14 @@ export class Vehicle {
       const gripLimitN = load * gripFactor(this.tyres[i])
       const slipAngle = Math.atan2(latVel, Math.abs(longVel) + 1)
 
-      // Тягу запрашиваем из сцепления, которое осталось после бокового усилия:
-      // угол увода уже забрал часть круга. От полного предела слип получался бы
-      // одинаковым в повороте и на прямой, ведущее колесо тратило бы половину
-      // круга на тягу в любом вираже — и болид срывался в разворот от любого газа.
-      const lateralUse = Math.min(1, Math.abs(slipAngle) / SLIP_ANGLE_AT_PEAK)
+      // Круг трения делится по фактической силе, а не по углу увода: угол за
+      // пиком означает, что шина уже скользит, а не что она израсходовала весь
+      // круг. От угла бюджет обнулялся после пика — ведущие колёса теряли всю
+      // тягу, сохраняя боковую силу, и болид разворачивало от любого газа.
+      const lateralOnly = tyreForce(this.tyres[i], 0, slipAngle, load)
+      const lateralUse = gripLimitN > 0
+        ? Math.min(1, Math.abs(lateralOnly.lateral) / gripLimitN)
+        : 0
       const longBudgetN = gripLimitN * Math.sqrt(Math.max(0, 1 - lateralUse * lateralUse))
       const slipRatio = longBudgetN > 0
         ? clamp(driveN / longBudgetN, -1, 1) * SLIP_AT_GRIP_LIMIT
