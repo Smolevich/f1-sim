@@ -14,13 +14,28 @@ const HANDLED = new Set(Object.values(KEYS).flat())
  * Сглаживание руля: клавиша даёт 0 или 1, а рулить ступенькой в симе невозможно —
  * машину срывает на каждом повороте. Ассист отключаемый.
  */
-const STEER_RATE = 3.5
-const STEER_RETURN = 5.0
+// 7.0 даёт полный поворот за 0.15 с. Прежние 3.5 — это 0.29 с, а на 200 км/ч
+// болид за это время проезжает 16 м, больше ширины трассы: руль ощущался
+// ватным, машина «не слушалась».
+export const STEER_RATE = 7.0
+// Возврат быстрее набора: отпустил клавишу — машина сразу распрямляется,
+// иначе в связке поворотов руль остаётся вывернутым.
+export const STEER_RETURN = 9.0
+
+/** Плавное движение руля к цели без перескока. */
+export function steerTowards(current: number, target: number, dt: number, rate: number): number {
+  const step = rate * dt
+  const delta = target - current
+  if (Math.abs(delta) <= step) return target
+  return current + Math.sign(delta) * step
+}
 
 export class KeyboardInput {
   private pressed = new Set<string>()
   private steer = 0
   smoothing = true
+  /** Множитель скорости руля: игрок подстраивает под себя. */
+  sensitivity = 1
 
   constructor(target: EventTarget = window) {
     target.addEventListener('keydown', (e) => {
@@ -43,8 +58,8 @@ export class KeyboardInput {
     const target = (right ? 1 : 0) - (left ? 1 : 0)
 
     if (this.smoothing) {
-      const rate = target === 0 ? STEER_RETURN : STEER_RATE
-      this.steer += Math.sign(target - this.steer) * Math.min(rate * dt, Math.abs(target - this.steer))
+      const rate = (target === 0 ? STEER_RETURN : STEER_RATE) * this.sensitivity
+      this.steer = steerTowards(this.steer, target, dt, rate)
     } else {
       this.steer = target
     }
