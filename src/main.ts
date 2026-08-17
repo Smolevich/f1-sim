@@ -8,6 +8,7 @@ import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
 import { buildCar } from './render/car'
 import { buildGhostCar } from './render/ghost-car'
 import { Hud } from './render/hud'
+import { LeaderboardPanel } from './render/leaderboard-panel'
 import { askName } from './render/menu'
 import { createScene } from './render/scene'
 import { buildTrackMesh } from './render/track-mesh'
@@ -45,6 +46,8 @@ async function main(): Promise<void> {
   saveName(name)
 
   const hud = new Hud()
+  const board = new LeaderboardPanel(name)
+  void board.refresh(track.meta.id)
   const input = new KeyboardInput()
   const recorder = new GhostRecorder()
 
@@ -107,7 +110,7 @@ async function main(): Promise<void> {
             timeMs: done.timeMs,
             sectors: done.sectors,
             assists: input.assists(),
-          })
+          }).then(() => board.refresh(track.meta.id))
         }
         recorder.reset()
       }
