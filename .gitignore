@@ -4,3 +4,8 @@ dist/
 *.key
 .DS_Store
 *.tsbuildinfo
+api/.venv/
+api/.pytest_cache/
+__pycache__/
+*.pyc
+*.db
