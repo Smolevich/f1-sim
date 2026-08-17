@@ -57,4 +57,9 @@ export class KeyboardInput {
       drs: KEYS.drs.some((k) => this.pressed.has(k)),
     }
   }
+
+  /** Набор включённых ассистов: уходит в leaderboard вместе со временем круга. */
+  assists(): string[] {
+    return this.smoothing ? ['steer-smoothing'] : []
+  }
 }
