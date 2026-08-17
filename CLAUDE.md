@@ -9,7 +9,7 @@
 ## Деплой
 
 `games.smolevich.com` → Cloudflare-туннель `telegram-bot` → nginx :80 на hetzner-bot.
-Статика в `/var/www/f1-sim`, API (позже) — uvicorn на :8095.
+Статика в `/var/www/f1-sim`, API — uvicorn на :8096 (8095 занят cat-game).
 
 Только через CI (`.github/workflows/deploy.yml`). Руками на сервере не править.
 

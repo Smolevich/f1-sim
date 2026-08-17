@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'public/**'
+      - 'api/**'
       - 'deploy/**'
       - 'index.html'
       - 'package.json'
@@ -36,6 +37,14 @@ jobs:
           npm test
           npm run build
 
+      - name: API tests
+        working-directory: api
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          uv sync
+          uv run pytest -q
+
       - name: Connect to Tailscale
         uses: tailscale/github-action@v2
         with:
@@ -51,17 +60,20 @@ jobs:
           username: ${{ secrets.VDS_USER }}
           key: ${{ secrets.VDS_SSH_KEY }}
           passphrase: ${{ secrets.VDS_SSH_PASSPHRASE }}
-          source: dist/**,deploy/nginx-f1-sim.conf
+          source: dist/**,api/**,deploy/nginx-f1-sim.conf,deploy/f1-sim-api.service
           target: /tmp/deploy-f1-sim
 
-      - name: Install static site and nginx vhost
+      - name: Install static site, nginx vhost and API
         uses: appleboy/ssh-action@v1.2.5
+        env:
+          VAULT_DEPLOY_TOKEN: ${{ secrets.VAULT_DEPLOY_TOKEN }}
         with:
           host: ${{ secrets.VDS_HOST }}
           port: ${{ secrets.VDS_PORT }}
           username: ${{ secrets.VDS_USER }}
           key: ${{ secrets.VDS_SSH_KEY }}
           passphrase: ${{ secrets.VDS_SSH_PASSPHRASE }}
+          envs: VAULT_DEPLOY_TOKEN
           script: |
             set -e
             WEB_DIR=/var/www/f1-sim
@@ -84,4 +96,34 @@ jobs:
               /etc/nginx/sites-enabled/f1-sim.conf
             sudo nginx -t
             sudo systemctl reload nginx
+
+            sudo mkdir -p /opt/f1-sim/api /opt/f1-sim/data /etc/f1-sim
+            sudo cp -a /tmp/deploy-f1-sim/api/. /opt/f1-sim/api/
+            sudo chown -R root:root /opt/f1-sim/api
+            sudo find /opt/f1-sim/api -type d -exec chmod 755 {} +
+            sudo find /opt/f1-sim/api -type f -exec chmod 644 {} +
+
+            if ! command -v uv >/dev/null; then
+              curl -LsSf https://astral.sh/uv/install.sh | sudo env UV_INSTALL_DIR=/usr/local/bin sh
+            fi
+            cd /opt/f1-sim/api
+            sudo uv sync --no-dev
+
+            # Соль для хеша IP — из Vault, не из gh-secrets и не из репо.
+            export VAULT_ADDR=http://127.0.0.1:8200
+            SALT=$(VAULT_TOKEN="$VAULT_DEPLOY_TOKEN" vault kv get -field=ip_salt secret/f1-sim/api 2>/dev/null || true)
+            if [ -z "$SALT" ]; then
+              SALT=$(openssl rand -hex 32)
+              VAULT_TOKEN="$VAULT_DEPLOY_TOKEN" vault kv put secret/f1-sim/api ip_salt="$SALT"
+            fi
+            printf 'F1SIM_DB=/opt/f1-sim/data/leaderboard.db\nF1SIM_IP_SALT=%s\n' "$SALT" \
+              | sudo tee /etc/f1-sim/env > /dev/null
+            sudo chmod 600 /etc/f1-sim/env
+
+            sudo install -m 0644 /tmp/deploy-f1-sim/deploy/f1-sim-api.service \
+              /etc/systemd/system/f1-sim-api.service
+            sudo systemctl daemon-reload
+            sudo systemctl enable --now f1-sim-api
+            sudo systemctl restart f1-sim-api
+
             rm -rf /tmp/deploy-f1-sim

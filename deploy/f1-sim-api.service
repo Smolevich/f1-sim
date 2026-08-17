@@ -1,0 +1,17 @@
+[Unit]
+Description=F1 Sim leaderboard API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/f1-sim/api
+ExecStart=/opt/f1-sim/api/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8096
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+SuccessExitStatus=143
+EnvironmentFile=/etc/f1-sim/env
+
+[Install]
+WantedBy=multi-user.target
