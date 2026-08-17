@@ -13,14 +13,27 @@ export function buildEdges(track: Track): TrackEdges {
 
   const n = track.centerline.length
   for (let i = 0; i < n; i++) {
+    const c = track.centerline[i]
     const prev = track.centerline[(i - 1 + n) % n]
     const next = track.centerline[(i + 1) % n]
-    const dx = next.x - prev.x
-    const dz = next.z - prev.z
+
+    // Направления входа и выхода нормируются по отдельности: в OSM длина
+    // соседних сегментов различается на два порядка (74 м на прямой против
+    // 2 м в шикане), и центральная разность по сырым векторам разворачивает
+    // нормаль на стыке, схлопывая полотно в бабочку.
+    const inX = c.x - prev.x
+    const inZ = c.z - prev.z
+    const outX = next.x - c.x
+    const outZ = next.z - c.z
+    const inLen = Math.hypot(inX, inZ) || 1
+    const outLen = Math.hypot(outX, outZ) || 1
+
+    const dx = inX / inLen + outX / outLen
+    const dz = inZ / inLen + outZ / outLen
     const len = Math.hypot(dx, dz) || 1
     const nx = -dz / len
     const nz = dx / len
-    const c = track.centerline[i]
+
     left.push({ x: c.x + nx * half, y: c.y, z: c.z + nz * half })
     right.push({ x: c.x - nx * half, y: c.y, z: c.z - nz * half })
   }
@@ -28,7 +41,14 @@ export function buildEdges(track: Track): TrackEdges {
   return { left, right }
 }
 
-/** Пройденная дистанция от точки старта до узла index, метры. */
+/**
+ * Пройденная дистанция от точки старта до узла index, метры.
+ *
+ * Замыкающий сегмент n-1 → 0 не учитывается, поэтому сумма по всем узлам
+ * короче `centerlineLength` на длину этого сегмента (на Монце — 96.6 м).
+ * Индекс не заворачивается: за пределами [0, n-1] значение упирается в
+ * границу, а не считается по модулю.
+ */
 export function distanceAlong(track: Track, index: number): number {
   let total = 0
   for (let i = 0; i < index; i++) {
