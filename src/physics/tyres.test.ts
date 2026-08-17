@@ -39,7 +39,12 @@ test('шина остывает без скольжения', () => {
 
 test('износ растёт от скольжения и не превышает единицы', () => {
   let s = fresh()
-  for (let i = 0; i < 10_000; i++) s = updateTyre(s, 1, 0.1)
+  for (let i = 0; i < 50_000; i++) s = updateTyre(s, 1, 0.1)
   expect(s.wear).toBeGreaterThan(0)
   expect(s.wear).toBeLessThanOrEqual(1)
+})
+
+test('разгруженное колесо не передаёт силу', () => {
+  const f = tyreForce(fresh(), 1, Math.PI / 4, -4000)
+  expect(Math.hypot(f.longitudinal, f.lateral)).toBe(0)
 })

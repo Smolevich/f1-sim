@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { FIXED_STEP, stepsFor, type Accumulator } from './world'
+import { FIXED_STEP, MAX_STEPS_PER_FRAME, stepsFor, type Accumulator } from './world'
 
 const empty = (): Accumulator => ({ pending: 0 })
 
@@ -49,4 +49,10 @@ test('за секунду набегает 120 шагов независимо �
 
 test('длинный фриз не даёт спирали смерти', () => {
   expect(stepsFor(empty(), 10).steps).toBeLessThanOrEqual(30)
+})
+
+test('при устойчивой перегрузке долг не копится', () => {
+  let acc = empty()
+  for (let i = 0; i < 20; i++) acc = stepsFor(acc, 0.5).acc
+  expect(acc.pending).toBeLessThanOrEqual(MAX_STEPS_PER_FRAME * FIXED_STEP)
 })

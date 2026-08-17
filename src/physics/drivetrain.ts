@@ -13,7 +13,7 @@ const PEAK_TORQUE_NM = 520
 const PEAK_RPM = 10_500
 const MAX_RPM = 15_000
 const IDLE_RPM = 4_000
-const WHEEL_RADIUS_M = 0.36
+export const WHEEL_RADIUS_M = 0.36
 const RECOVERY_W = 250_000
 
 /** Кривая момента: колокол с пиком на PEAK_RPM, срез после максимума. */

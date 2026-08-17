@@ -1,7 +1,7 @@
 export const FIXED_STEP = 1 / 120
 
 /** Потолок шагов за кадр: после долгого фриза не пытаемся догнать всё разом. */
-const MAX_STEPS_PER_FRAME = 30
+export const MAX_STEPS_PER_FRAME = 30
 
 export type Accumulator = {
   pending: number
@@ -18,5 +18,8 @@ export function stepsFor(
 ): { steps: number; acc: Accumulator } {
   const pending = acc.pending + Math.max(0, frameSeconds)
   const steps = Math.min(MAX_STEPS_PER_FRAME, Math.floor(pending / FIXED_STEP))
-  return { steps, acc: { pending: pending - steps * FIXED_STEP } }
+  // Долг сверх потолка списываем, а не копим: иначе после долгого фриза игра
+  // навсегда отстаёт и доигрывает устаревший ввод.
+  const remainder = Math.min(pending - steps * FIXED_STEP, MAX_STEPS_PER_FRAME * FIXED_STEP)
+  return { steps, acc: { pending: remainder } }
 }

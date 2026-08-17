@@ -44,7 +44,9 @@ export function tyreForce(
   load: number,
 ): { longitudinal: number; lateral: number } {
   const grip = gripFactor(state)
-  const limit = load * grip
+  // Разгруженное колесо не передаёт силу: отрицательная нагрузка физически
+  // означает, что колесо оторвалось от полотна.
+  const limit = Math.max(0, load) * grip
 
   const longRaw = magicFormula(slipRatio, 10) * limit
   const latRaw = magicFormula(slipAngle / (Math.PI / 2), 8) * limit
