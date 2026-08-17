@@ -9,6 +9,7 @@ import { cameraPose, nextMode, type CameraMode } from './render/cameras'
 import { buildGhostCar } from './render/ghost-car'
 import { Hud } from './render/hud'
 import { LeaderboardPanel } from './render/leaderboard-panel'
+import { Minimap } from './render/minimap'
 import { askName } from './render/menu'
 import { createScene } from './render/scene'
 import { buildStartLine, buildTrackLines, buildTrackMesh } from './render/track-mesh'
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
   const board = new LeaderboardPanel(name)
   void board.refresh(track.meta.id)
   const input = new KeyboardInput()
+  const minimap = new Minimap(track)
   const recorder = new GhostRecorder()
 
   const makeVehicle = (): Vehicle => new Vehicle(undefined, startPose(track), track)
@@ -183,6 +185,7 @@ async function main(): Promise<void> {
       valid: lap.valid,
       tyreTempC: tyres.reduce((s, t) => s + t.tempC, 0) / tyres.length,
     })
+    minimap.update(telemetry.position, heading)
 
     renderer.render(scene, camera)
     requestAnimationFrame(frame)
