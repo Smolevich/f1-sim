@@ -44,6 +44,11 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           uv sync
           uv run pytest -q
+          # Виртуальное окружение раннера на сервер не едет: scp копирует с диска,
+          # мимо .gitignore, а shebang'и внутри указывают на пути раннера
+          # (/home/runner/...), которых на сервере нет — юнит падает с 203/EXEC.
+          # Окружение пересоздаётся на сервере своим `uv sync`.
+          rm -rf .venv
 
       - name: Connect to Tailscale
         uses: tailscale/github-action@v2
@@ -98,6 +103,9 @@ jobs:
             sudo systemctl reload nginx
 
             sudo mkdir -p /opt/f1-sim/api /opt/f1-sim/data /etc/f1-sim
+            # Чужое окружение (с раннера или от прошлого деплоя) сносим до копирования:
+            # его shebang'и указывают на несуществующие здесь пути.
+            sudo rm -rf /tmp/deploy-f1-sim/api/.venv
             sudo cp -a /tmp/deploy-f1-sim/api/. /opt/f1-sim/api/
             sudo chown -R root:root /opt/f1-sim/api
             # .venv исключён: он не из репозитория, а chmod 644 на повторном
