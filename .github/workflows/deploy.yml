@@ -1,0 +1,79 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'deploy/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-f1-sim
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install, test, build
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:gha-runner
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VDS_HOST }}
+          port: ${{ secrets.VDS_PORT }}
+          username: ${{ secrets.VDS_USER }}
+          key: ${{ secrets.VDS_SSH_KEY }}
+          passphrase: ${{ secrets.VDS_SSH_PASSPHRASE }}
+          source: dist/**,deploy/nginx-f1-sim.conf
+          target: /tmp/deploy-f1-sim
+
+      - name: Install static site and nginx vhost
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VDS_HOST }}
+          port: ${{ secrets.VDS_PORT }}
+          username: ${{ secrets.VDS_USER }}
+          key: ${{ secrets.VDS_SSH_KEY }}
+          passphrase: ${{ secrets.VDS_SSH_PASSPHRASE }}
+          script: |
+            set -e
+            sudo mkdir -p /var/www/f1-sim
+            sudo rsync -a --delete /tmp/deploy-f1-sim/dist/ /var/www/f1-sim/
+            sudo install -m 0644 /tmp/deploy-f1-sim/deploy/nginx-f1-sim.conf \
+              /etc/nginx/sites-available/f1-sim.conf
+            sudo ln -sfn /etc/nginx/sites-available/f1-sim.conf \
+              /etc/nginx/sites-enabled/f1-sim.conf
+            sudo nginx -t
+            sudo systemctl reload nginx
+            rm -rf /tmp/deploy-f1-sim
+```
+```yaml
+  - hostname: games.smolevich.com
+    service: http://localhost:80
