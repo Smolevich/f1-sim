@@ -10,10 +10,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "three": "^0.180.0",
-    "@dimforge/rapier3d-compat": "^0.14.0"
+    "@dimforge/rapier3d-compat": "^0.14.0",
+    "three": "^0.180.0"
   },
   "devDependencies": {
+    "@types/node": "^26.2.0",
     "@types/three": "^0.180.0",
     "tsx": "^4.19.2",
     "typescript": "~5.9.3",
