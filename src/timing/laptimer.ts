@@ -1,4 +1,4 @@
-import type { Track, TrackPoint } from '../track/schema'
+import { centerlineLength, type Track, type TrackPoint } from '../track/schema'
 
 export type SectorIndex = 0 | 1 | 2
 
@@ -19,20 +19,34 @@ export function createLapState(): LapState {
   return { startedAtMs: null, sectorEntryMs: [0, 0, 0], lastSector: null, valid: true }
 }
 
-/** Доля круга 0..1 по ближайшему узлу осевой линии. */
+/**
+ * Доля круга 0..1 по накопленной длине до ближайшего узла. Делить индекс узла
+ * на их количество нельзя: в OSM узлы густые в поворотах и редкие на прямых
+ * (на Монце от 2 до 190 м между соседними), и доля по индексу расходится с
+ * долей по дистанции на проценты — границы секторов уезжают на сотни метров.
+ */
 export function progressFraction(track: Track, point: TrackPoint): number {
   const n = track.centerline.length
-  let bestIndex = 0
+  let nearest = 0
   let bestDistance = Infinity
   for (let i = 0; i < n; i++) {
     const c = track.centerline[i]
     const d = (point.x - c.x) ** 2 + (point.z - c.z) ** 2
     if (d < bestDistance) {
       bestDistance = d
-      bestIndex = i
+      nearest = i
     }
   }
-  return bestIndex / n
+
+  let travelled = 0
+  for (let i = 0; i < nearest; i++) {
+    const a = track.centerline[i]
+    const b = track.centerline[i + 1]
+    travelled += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+  }
+
+  const total = centerlineLength(track.centerline)
+  return total > 0 ? travelled / total : 0
 }
 
 export function sectorFor(track: Track, fraction: number): SectorIndex {

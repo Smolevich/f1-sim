@@ -1,8 +1,9 @@
+import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
 import {
   createLapState, progressFraction, sectorFor, updateLap,
 } from './laptimer'
-import type { Track, TrackPoint } from '../track/schema'
+import { centerlineLength, type Track, type TrackPoint } from '../track/schema'
 
 const ring = (radius = 100): Track => ({
   meta: {
@@ -108,4 +109,28 @@ test('пропущенный сектор не даёт засчитать кр�
     if (r.completed) completed = r.completed
   }
   expect(completed === null || completed.valid === false).toBe(true)
+})
+
+test('доля круга считается по длине, а не по номеру узла', () => {
+  const real: Track = JSON.parse(readFileSync('public/tracks/monza.json', 'utf8'))
+  const n = real.centerline.length
+
+  // Для каждого узла доля должна совпадать с накопленной длиной до него.
+  const total = centerlineLength(real.centerline)
+  let cumulative = 0
+  for (let i = 1; i < n; i++) {
+    const a = real.centerline[i - 1]
+    const b = real.centerline[i]
+    cumulative += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+    if (i % 50 !== 0) continue
+    const expected = cumulative / total
+    expect(progressFraction(real, real.centerline[i])).toBeCloseTo(expected, 3)
+  }
+})
+
+test('на неравномерных узлах доля по длине расходится с долей по индексу', () => {
+  const real: Track = JSON.parse(readFileSync('public/tracks/monza.json', 'utf8'))
+  const i = 50
+  const byIndex = i / real.centerline.length
+  expect(Math.abs(progressFraction(real, real.centerline[i]) - byIndex)).toBeGreaterThan(0.05)
 })
