@@ -62,6 +62,11 @@ const SLIP_DENOM_FLOOR_MS = 0.1
 // заметно слабее тормозов (28 кН / 798 кг ≈ 35 м/с²): вылет должен стоить
 // времени, но не выбрасывать болид из заезда.
 const OFF_TRACK_DECEL_MS2 = 8
+// Ниже этой скорости тормоз переключается на задний ход: болид должен уметь
+// отъехать от стены, а не стоять в ней до сброса заезда.
+const REVERSE_SPEED_MS = 1.5
+// Заметно слабее тяги вперёд: это манёвр выезда, а не режим езды задом.
+const REVERSE_FORCE_N = 6_000
 // Отступ и высота повторяют отрисовку в trackside.ts: физическая стенка должна
 // стоять там же, где нарисованная, иначе болид упирается в воздух или проезжает
 // сквозь железо.
@@ -287,11 +292,13 @@ export class Vehicle {
       // отношение силы к сцеплению уходит в бесконечность вместе с её нагревом.
       const longCapN = Math.sqrt(Math.max(0, gripLimitN * gripLimitN - latN * latN))
       const tractionN = wheel.driven ? driveN : 0
-      const longN = clamp(
-        tractionN - Math.sign(longVel) * brakeN,
-        -longCapN,
-        longCapN,
-      )
+      // Почти на месте тормоз работает как задний ход: без этого болид,
+      // упёршийся носом в отбойник, застревает навсегда — Math.sign(longVel)
+      // на нулевой скорости обнуляет тормозную силу, и выехать нечем.
+      const brakingN = Math.abs(longVel) < REVERSE_SPEED_MS
+        ? -REVERSE_FORCE_N / 4 * clamp(input.brake, 0, 1)
+        : Math.sign(longVel) * brakeN
+      const longN = clamp(tractionN - brakingN, -longCapN, longCapN)
       const force = { longitudinal: longN, lateral: latN }
       this.lateralForces[i] = latN
 
