@@ -9,9 +9,28 @@ test('на стоянке колесо не крутится', () => {
   expect(wheelSpinDelta(0, 0.1)).toBe(0)
 })
 
-test('угол поворота колёс пропорционален рулю', () => {
-  expect(steerAngleFor(1)).toBeGreaterThan(steerAngleFor(0.5))
-  expect(steerAngleFor(-1)).toBeLessThan(0)
+test('угол поворота колёс растёт по модулю вместе с рулём', () => {
+  expect(Math.abs(steerAngleFor(1))).toBeGreaterThan(Math.abs(steerAngleFor(0.5)))
+})
+
+test('противоположный руль даёт противоположный угол', () => {
+  expect(Math.sign(steerAngleFor(1))).toBe(-Math.sign(steerAngleFor(-1)))
+})
+
+test('визуальный поворот колёс совпадает по знаку с физическим', () => {
+  // Физика: rotateY(forward, steerRad) при положительном угле уводит
+  // направление в отрицательный X. Рендер обязан давать тот же знак.
+  const rotateY = (v: { x: number; z: number }, a: number) => ({
+    x: v.x * Math.cos(a) - v.z * Math.sin(a),
+    z: v.x * Math.sin(a) + v.z * Math.cos(a),
+  })
+  const physics = rotateY({ x: 0, z: 1 }, 0.3)
+
+  const angle = steerAngleFor(1)
+  // three.js: rotation.y = angle поворачивает вектор как Ry(angle)
+  const render = { x: Math.sin(angle), z: Math.cos(angle) }
+
+  expect(Math.sign(render.x)).toBe(Math.sign(physics.x))
 })
 
 test('поворот колёс ограничен максимальным углом', () => {

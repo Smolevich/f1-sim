@@ -16,8 +16,13 @@ export function wheelSpinDelta(speedMs: number, dt: number): number {
   return speedMs <= 0 ? 0 : (speedMs / WHEEL_RADIUS_M) * dt
 }
 
+/**
+ * Знак обратен физическому: в three.js положительный rotation.y вращает против
+ * часовой стрелки, а rotateY в vehicle.ts — по часовой. Без инверсии колёса
+ * визуально поворачивают в сторону, противоположную рулю.
+ */
 export function steerAngleFor(steer: number): number {
-  return Math.max(-1, Math.min(1, steer)) * MAX_STEER_RAD
+  return -Math.max(-1, Math.min(1, steer)) * MAX_STEER_RAD
 }
 
 export function spinWheels(parts: CarParts, speedMs: number, steer: number, dt: number): void {
