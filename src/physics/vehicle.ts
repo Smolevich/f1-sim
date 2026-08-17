@@ -65,7 +65,7 @@ const OFF_TRACK_DECEL_MS2 = 8
 // Отступ и высота повторяют отрисовку в trackside.ts: физическая стенка должна
 // стоять там же, где нарисованная, иначе болид упирается в воздух или проезжает
 // сквозь железо.
-const BARRIER_OFFSET_M = 6
+const BARRIER_OFFSET_M = 2.5
 const BARRIER_HEIGHT_M = 1.4
 const BARRIER_THICKNESS_M = 0.3
 // WHEEL_RADIUS_M импортируется из drivetrain: радиус колеса один и тот же
