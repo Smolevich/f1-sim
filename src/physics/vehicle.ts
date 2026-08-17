@@ -42,9 +42,24 @@ const BRAKE_FORCE_N = 28_000
 // максимальна при s = tan(π/3.8)/10. Запрошенную тягу отображаем в этот отрезок,
 // чтобы полное сцепление отвечало полному пределу шины, а не срыву за пиком.
 const SLIP_AT_GRIP_LIMIT = 0.1086
+// Угол увода, на котором боковая формула из tyres.ts выходит на пик:
+// sin(1.9·atan(8·a/(π/2))) максимальна при a = (π/2)·tan(π/3.8)/8 ≈ 12.2°.
+const SLIP_ANGLE_AT_PEAK = (Math.PI / 2) * Math.tan(Math.PI / 3.8) / 8
 // Проскальзывание, эквивалентное полной загрузке пятна контакта: при нём
 // равновесие тепловой модели tyres.ts (90·s = 0.6·(T−25)) даёт рабочие 100 °C.
 const WORKING_SLIP = 0.5
+// Прогрев от качения по полотну. На этой «дозе» равновесие даёт 92.5 °C —
+// свободно катящееся переднее колесо выходит в рабочее окно, оставаясь чуть
+// холоднее ведущих задних, которые догреваются загрузкой пятна.
+const ROAD_HEAT_SLIP = 0.45
+// Скорость, с которой прогрев от дороги выходит на полку.
+const ROAD_HEAT_SPEED_MS = 30
+// Высота центра крена над пятном контакта. Боковая сила шины приложена в пятне,
+// но кузов опирается на подвеску: плечо крена — это расстояние от пятна до
+// центра крена, а не до ступицы. С полным плечом (0.45 м при полуколее 0.8 м)
+// порог опрокидывания выходит ~1.5 g, ниже предела шин, и болид кувыркается
+// в каждом повороте вместо того, чтобы скользить.
+const ROLL_CENTRE_M = 0.1
 // WHEEL_RADIUS_M импортируется из drivetrain: радиус колеса один и тот же
 // и для оборотов, и для перевода момента в силу — разъехавшись, они дадут
 // молча несогласованные тягу и передачи.
@@ -61,6 +76,8 @@ export class Vehicle {
   private body: RAPIER.RigidBody
   private tyres: TyreState[]
   private aero: AeroSetup = { frontWing: 0.5, rearWing: 0.5 }
+  /** Вертикальная нагрузка на каждое колесо за последний шаг, ньютоны. */
+  readonly wheelLoads: number[] = [0, 0, 0, 0]
 
   constructor(aero?: AeroSetup, start?: VehicleStart) {
     if (aero) this.aero = aero
@@ -96,13 +113,12 @@ export class Vehicle {
     // землю, и машина проваливается сквозь трассу.
     this.world.updateSceneQueries()
 
-    // addForce в Rapier держит силу до явного сброса, а не один шаг. Без этого
-    // силы шага складываются с силами всех предыдущих, и подвеска за секунду
-    // выбрасывает машину в небо.
+    // addForce в Rapier держит силу до явного сброса, а не один шаг.
     this.body.resetForces(true)
     this.body.resetTorques(true)
 
     const velocity = this.body.linvel()
+    const angular = this.body.angvel()
     const speedMs = Math.hypot(velocity.x, velocity.z)
     const rotation = this.body.rotation()
     const forward = rotate({ x: 0, y: 0, z: 1 }, rotation)
@@ -138,24 +154,37 @@ export class Vehicle {
       const hit = this.world.castRay(
         ray, SUSPENSION_TRAVEL_M, true, undefined, undefined, undefined, this.body,
       )
+      this.wheelLoads[i] = 0
       if (!hit) return
 
       const compression = SUSPENSION_TRAVEL_M - hit.timeOfImpact
       if (compression <= 0) return
 
+      // Скорость в точке колеса, а не в центре масс: вращение кузова добавляет
+      // ω×r, и без этого слагаемого все четыре колеса видят один угол увода
+      // независимо от рыскания. Именно оно и гасит занос физически — иначе
+      // единственным демпфером остаётся искусственный angularDamping.
+      const spin = crossY(angular, offset)
+      const wheelVelX = velocity.x + spin.x
+      const wheelVelZ = velocity.z + spin.z
+
       // Демпфер работает лишь при сжатой пружине: сам по себе он не имеет
       // равновесия и на падающей машине разгоняет её вверх вместо гашения.
+      // Вертикальную скорость берём в точке колеса — крен и тангаж сжимают
+      // подвеску по углам, и демпфер по центру масс их не видит.
+      const wheelVelY = velocity.y + spin.y
       const load = Math.max(
         0,
-        compression * SUSPENSION_STIFFNESS - velocity.y * SUSPENSION_DAMPING,
+        compression * SUSPENSION_STIFFNESS - wheelVelY * SUSPENSION_DAMPING,
       )
+      this.wheelLoads[i] = load
       this.body.addForceAtPoint({ x: 0, y: load, z: 0 }, origin, true)
 
       const wheelForward = wheel.steered ? rotateY(forward, steerRad) : forward
       const wheelRight = wheel.steered ? rotateY(rightVec, steerRad) : rightVec
 
-      const longVel = velocity.x * wheelForward.x + velocity.z * wheelForward.z
-      const latVel = velocity.x * wheelRight.x + velocity.z * wheelRight.z
+      const longVel = wheelVelX * wheelForward.x + wheelVelZ * wheelForward.z
+      const latVel = wheelVelX * wheelRight.x + wheelVelZ * wheelRight.z
 
       const driveN = wheel.driven
         ? (wheelTorque(rpm, gear, input.throttle) / WHEEL_RADIUS_M) / 2
@@ -168,10 +197,17 @@ export class Vehicle {
       // пробуксовка. Считать его отношением сил (driveN/load) нельзя — это
       // сразу упирает слип в единицу и держит колесо в вечном букс.
       const gripLimitN = load * gripFactor(this.tyres[i])
-      const slipRatio = gripLimitN > 0
-        ? clamp(driveN / gripLimitN, -1, 1) * SLIP_AT_GRIP_LIMIT
-        : 0
       const slipAngle = Math.atan2(latVel, Math.abs(longVel) + 1)
+
+      // Тягу запрашиваем из сцепления, которое осталось после бокового усилия:
+      // угол увода уже забрал часть круга. От полного предела слип получался бы
+      // одинаковым в повороте и на прямой, ведущее колесо тратило бы половину
+      // круга на тягу в любом вираже — и болид срывался в разворот от любого газа.
+      const lateralUse = Math.min(1, Math.abs(slipAngle) / SLIP_ANGLE_AT_PEAK)
+      const longBudgetN = gripLimitN * Math.sqrt(Math.max(0, 1 - lateralUse * lateralUse))
+      const slipRatio = longBudgetN > 0
+        ? clamp(driveN / longBudgetN, -1, 1) * SLIP_AT_GRIP_LIMIT
+        : 0
 
       const force = tyreForce(this.tyres[i], slipRatio, slipAngle, load)
       // Тяга не может превысить ни запрошенное двигателем, ни предел шины.
@@ -182,26 +218,39 @@ export class Vehicle {
       const longN = tractionN - Math.sign(longVel) * brakeN
       const latN = -force.lateral
 
+      // Сила шины приложена не на высоте ступицы, иначе плечо крена нулевое,
+      // нагрузка на всех колёсах одинаковая и баланса перед/зад не существует.
+      // Точка приложения — центр крена подвески, чуть выше пятна контакта:
+      // через него подвеска и передаёт боковую силу кузову.
+      const contact = {
+        x: origin.x,
+        y: origin.y - hit.timeOfImpact + ROLL_CENTRE_M,
+        z: origin.z,
+      }
       this.body.addForceAtPoint(
         {
           x: wheelForward.x * longN + wheelRight.x * latN,
           y: 0,
           z: wheelForward.z * longN + wheelRight.z * latN,
         },
-        origin,
+        contact,
         true,
       )
 
-      // Тепловая модель шины ждёт меру проскальзывания, при которой активная
-      // езда держит рабочие ~100 °C. Нормированный слип для этого слишком мал:
-      // шина остывала бы до 40 °C и теряла сцепление прямо на прямой. Мерой
-      // берём загрузку пятна контакта — долю использованного предела.
+      // Шину греет и дорога, а не только передаваемая ею сила. Без этого
+      // слагаемого ненагруженные передние колёса на прямой (driveN = 0,
+      // угол увода ≈ 0) остывают до окружающих 25 °C и теряют почти всё
+      // сцепление — повернуть на таких невозможно.
+      const roadHeat = Math.min(1, speedMs / ROAD_HEAT_SPEED_MS) * ROAD_HEAT_SLIP
       const utilisation = gripLimitN > 0
         ? Math.hypot(force.longitudinal, force.lateral) / gripLimitN
         : 0
+      // Качение задаёт нижнюю границу прогрева, работа пятна поднимает выше неё.
+      // Складывать эти вклады нельзя: у ведущих колёс сумма выводит шину за 160 °C,
+      // где сцепление падает так же, как на холодной.
       this.tyres[i] = updateTyre(
         this.tyres[i],
-        utilisation * WORKING_SLIP + Math.abs(slipAngle),
+        Math.max(roadHeat, utilisation * WORKING_SLIP) + Math.abs(slipAngle),
         dt,
       )
     })
@@ -222,6 +271,16 @@ export class Vehicle {
   orientation(): RAPIER.Rotation {
     return this.body.rotation()
   }
+
+  /** Линейная скорость кузова, м/с по осям мира. */
+  velocity(): Vec3 {
+    return this.body.linvel()
+  }
+
+  /** Состояние шин: температура и износ по колёсам. */
+  tyreStates(): readonly TyreState[] {
+    return this.tyres
+  }
 }
 
 type Vec3 = { x: number; y: number; z: number }
@@ -236,6 +295,15 @@ function rotate(v: Vec3, q: RAPIER.Rotation): Vec3 {
     x: ix * w + iw * -x + iy * -z - iz * -y,
     y: iy * w + iw * -y + iz * -x - ix * -z,
     z: iz * w + iw * -z + ix * -y - iy * -x,
+  }
+}
+
+/** Горизонтальная часть ω×r: вклад вращения кузова в скорость точки. */
+function crossY(omega: Vec3, r: Vec3): Vec3 {
+  return {
+    x: omega.y * r.z - omega.z * r.y,
+    y: omega.z * r.x - omega.x * r.z,
+    z: omega.x * r.y - omega.y * r.x,
   }
 }
 

@@ -8,6 +8,8 @@ const KEYS = {
   drs: ['Space'],
 }
 
+const HANDLED = new Set(Object.values(KEYS).flat())
+
 /**
  * Сглаживание руля: клавиша даёт 0 или 1, а рулить ступенькой в симе невозможно —
  * машину срывает на каждом повороте. Ассист отключаемый.
@@ -21,8 +23,18 @@ export class KeyboardInput {
   smoothing = true
 
   constructor(target: EventTarget = window) {
-    target.addEventListener('keydown', (e) => this.pressed.add((e as KeyboardEvent).code))
-    target.addEventListener('keyup', (e) => this.pressed.delete((e as KeyboardEvent).code))
+    target.addEventListener('keydown', (e) => {
+      const code = (e as KeyboardEvent).code
+      // Стрелки скроллят страницу, Space нажимает сфокусированный элемент —
+      // и то и другое уводит управление из игры.
+      if (HANDLED.has(code)) e.preventDefault()
+      this.pressed.add(code)
+    })
+    target.addEventListener('keyup', (e) => {
+      const code = (e as KeyboardEvent).code
+      if (HANDLED.has(code)) e.preventDefault()
+      this.pressed.delete(code)
+    })
   }
 
   read(dt: number): CarInput {

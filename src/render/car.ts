@@ -3,7 +3,6 @@ import { WHEEL_RADIUS_M } from '../physics/drivetrain'
 
 const LENGTH_M = 5.6
 const WIDTH_M = 2.0
-// Радиус колеса — из физики, чтобы меш и симуляция не разъехались.
 const WHEEL_WIDTH_M = 0.38
 
 /** Болид собирается кодом: пропорции по регламенту, ливрея своя. */
