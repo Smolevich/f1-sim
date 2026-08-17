@@ -54,3 +54,23 @@ def test_top_capped_at_five(client):
 def test_overlong_name_rejected_by_schema(client):
     r = client.post("/api/leaderboard", json=valid_lap() | {"name": "X" * 50})
     assert r.status_code == 422
+
+
+def test_name_is_sanitized_server_side(client):
+    client.post("/api/leaderboard", json=valid_lap() | {"name": "<script>x"})
+    name = client.get("/api/leaderboard?track=monza").json()["entries"][0]["name"]
+    assert "<" not in name and ">" not in name
+
+
+def test_empty_name_becomes_anon(client):
+    client.post("/api/leaderboard", json=valid_lap() | {"name": "   "})
+    assert client.get("/api/leaderboard?track=monza").json()["entries"][0]["name"] == "ANON"
+
+
+def test_rejected_attempts_count_toward_the_rate_limit(client):
+    impossible = valid_lap() | {"time_ms": 40_000, "sectors": [13_000, 14_000, 13_000]}
+    for _ in range(61):
+        client.post("/api/leaderboard", json=impossible)
+    body = client.post("/api/leaderboard", json=valid_lap()).json()
+    assert body["accepted"] is False
+    assert "слишком много" in body["reason"]
