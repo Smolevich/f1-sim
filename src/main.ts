@@ -11,7 +11,7 @@ import { Hud } from './render/hud'
 import { LeaderboardPanel } from './render/leaderboard-panel'
 import { askName } from './render/menu'
 import { createScene } from './render/scene'
-import { buildTrackMesh } from './render/track-mesh'
+import { buildStartLine, buildTrackLines, buildTrackMesh } from './render/track-mesh'
 import {
   loadBest, loadGhost, loadName, saveBest, saveGhost, saveName,
 } from './storage/local'
@@ -35,6 +35,8 @@ async function main(): Promise<void> {
   const { scene, camera, renderer } = createScene(canvas)
   const track: Track = await fetch('/tracks/monza.json').then((r) => r.json())
   scene.add(buildTrackMesh(track))
+  scene.add(buildTrackLines(track))
+  scene.add(buildStartLine(track))
 
   const carMesh = buildCar()
   scene.add(carMesh)
