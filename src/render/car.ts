@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import { WHEEL_RADIUS_M } from '../physics/drivetrain'
 
-const WIDTH_M = 2.0
 const WHEEL_WIDTH_M = 0.38
 /** Максимальный угол поворота колёс в рендере, совпадает с MAX_STEER_RAD физики. */
 const MAX_STEER_RAD = 0.3
@@ -39,60 +38,110 @@ export function buildCarParts(color = 0x1e3a8a): CarParts {
   const rubber = new THREE.MeshStandardMaterial({ color: 0x0d0d0f, roughness: 0.9 })
   const rim = new THREE.MeshStandardMaterial({ color: 0xb8b8c0, metalness: 0.9, roughness: 0.25 })
 
-  // Монокок: узкий нос, широкие понтоны, сужение к корме — силуэт F1 читается
-  // в основном по этому профилю, а не по деталям.
-  const tub = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.32, 2.6), body)
-  tub.position.set(0, 0.42, -0.1)
+  // Силуэт собирается из скруглённых форм, а не из коробок: у настоящего болида
+  // нет ни одной прямоугольной поверхности, и именно углы читаются как «майнкрафт».
+  // Капсулы и лате-формы дают тот же вес геометрии, но узнаваемый профиль.
+  const tub = new THREE.Mesh(new THREE.CapsuleGeometry(0.36, 2.5, 6, 16), body)
+  tub.rotation.x = Math.PI / 2
+  tub.scale.set(1, 1, 0.62)
+  tub.position.set(0, 0.44, -0.15)
   group.add(tub)
 
-  const engineCover = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.42, 1.9), body)
-  engineCover.position.set(0, 0.55, -1.3)
+  // Моторный отсек сужается к корме: конус вместо коробки.
+  const engineCover = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.17, 1.9, 12), body)
+  engineCover.rotation.x = Math.PI / 2
+  engineCover.position.set(0, 0.55, -1.5)
   group.add(engineCover)
 
-  const airbox = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.5), body)
-  airbox.position.set(0, 0.86, -0.55)
+  // Воздухозаборник над головой пилота — характерная «горбушка» F1.
+  const airbox = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), body)
+  airbox.scale.set(0.8, 1.05, 1.25)
+  airbox.position.set(0, 0.86, -0.5)
   group.add(airbox)
 
+  // Акулий плавник: профиль рисуется в XY, поэтому длина по X, высота по Y,
+  // а поворот на -90° вокруг Y укладывает его вдоль машины. Без поворота
+  // экструзия уходит поперёк и плавник встаёт стеной через всю сцену.
+  const finShape = new THREE.Shape()
+  finShape.moveTo(0, 0)
+  finShape.lineTo(1.6, 0)
+  finShape.lineTo(1.6, 0.1)
+  finShape.quadraticCurveTo(0.7, 0.3, 0, 0.24)
+  finShape.closePath()
+  const fin = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(finShape, { depth: 0.035, bevelEnabled: false }),
+    body,
+  )
+  fin.rotation.y = -Math.PI / 2
+  fin.position.set(0.018, 0.6, -0.75)
+  group.add(fin)
+
   for (const side of [-1, 1]) {
-    const pod = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 1.7), body)
-    pod.position.set(side * 0.62, 0.4, -0.5)
+    // Понтон: капсула со скосом наружу, а не параллелепипед.
+    const pod = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 1.15, 4, 12), body)
+    pod.rotation.x = Math.PI / 2
+    pod.scale.set(1, 1, 0.78)
+    pod.position.set(side * 0.63, 0.4, -0.65)
     group.add(pod)
+    // Боковой воздухозаборник.
+    const inlet = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.12, 12), dark)
+    inlet.rotation.z = Math.PI / 2
+    inlet.position.set(side * 0.7, 0.44, 0.05)
+    group.add(inlet)
   }
 
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.9, 10), body)
+  // Тонкий приподнятый нос: конус с малым радиусом, как в современном регламенте.
+  const nose = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.2, 2.1, 10), body)
   nose.rotation.x = Math.PI / 2
-  nose.position.set(0, 0.36, 1.9)
+  nose.position.set(0, 0.34, 2.0)
   group.add(nose)
 
-  const frontWing = new THREE.Mesh(new THREE.BoxGeometry(WIDTH_M, 0.07, 0.75), body)
-  frontWing.position.set(0, 0.14, 2.55)
-  group.add(frontWing)
-
-  const frontFlap = new THREE.Mesh(new THREE.BoxGeometry(WIDTH_M * 0.95, 0.05, 0.3), dark)
-  frontFlap.position.set(0, 0.26, 2.45)
-  group.add(frontFlap)
-
-  const rearWing = new THREE.Mesh(new THREE.BoxGeometry(WIDTH_M * 0.8, 0.05, 0.62), body)
-  rearWing.position.set(0, 0.98, -2.5)
-  group.add(rearWing)
-
+  // Переднее крыло: три плоскости с изгибом вместо одной коробки.
+  for (const [i, w, y, z, thick] of [[0, 2.0, 0.10, 2.62, 0.045], [1, 1.9, 0.20, 2.5, 0.035], [2, 1.75, 0.28, 2.38, 0.03]] as const) {
+    const flap = new THREE.Mesh(new THREE.BoxGeometry(w, thick, 0.34), i === 0 ? body : dark)
+    flap.position.set(0, y, z)
+    flap.rotation.x = -0.12 * (i + 1)
+    group.add(flap)
+  }
   for (const side of [-1, 1]) {
-    const endplate = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.45, 0.62), dark)
-    endplate.position.set(side * WIDTH_M * 0.4, 0.82, -2.5)
-    group.add(endplate)
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.34, 0.72), dark)
+    plate.position.set(side * 1.0, 0.21, 2.5)
+    group.add(plate)
   }
 
-  const diffuser = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.22, 0.5), dark)
-  diffuser.position.set(0, 0.22, -2.35)
+  // Заднее крыло на двух пилонах, выше и уже переднего.
+  const rearWing = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.05, 0.5), body)
+  rearWing.position.set(0, 1.02, -2.62)
+  rearWing.rotation.x = 0.14
+  group.add(rearWing)
+  const rearFlap = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.04, 0.26), dark)
+  rearFlap.position.set(0, 1.16, -2.72)
+  rearFlap.rotation.x = 0.3
+  group.add(rearFlap)
+  for (const side of [-1, 1]) {
+    const endplate = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.5, 0.66), dark)
+    endplate.position.set(side * 0.78, 0.92, -2.62)
+    group.add(endplate)
+    const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.36, 0.16), dark)
+    pylon.position.set(side * 0.16, 0.82, -2.6)
+    group.add(pylon)
+  }
+
+  // Диффузор со скосом.
+  const diffuser = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.42, 0.6, 8, 1, false, 0, Math.PI), dark)
+  diffuser.rotation.x = -Math.PI / 2
+  diffuser.rotation.z = Math.PI
+  diffuser.scale.set(1.7, 1, 0.55)
+  diffuser.position.set(0, 0.2, -2.5)
   group.add(diffuser)
 
-  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.045, 8, 20, Math.PI), dark)
-  halo.position.set(0, 0.78, 0.35)
+  // Halo и шлем.
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.04, 8, 22, Math.PI), dark)
+  halo.position.set(0, 0.76, 0.3)
   halo.rotation.x = -Math.PI / 2
   group.add(halo)
-
-  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), dark)
-  helmet.position.set(0, 0.72, 0.15)
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 12), dark)
+  helmet.position.set(0, 0.71, 0.12)
   group.add(helmet)
 
   // Колесо в собственном пивоте: пивот поворачивается рулём, колесо крутится

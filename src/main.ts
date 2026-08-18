@@ -5,6 +5,7 @@ import { submitLap } from './net/leaderboard'
 import { Vehicle } from './physics/vehicle'
 import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
 import { buildBrakingMarkers, buildRacingLine } from './render/braking'
+import { ControlsHint } from './render/controls-hint'
 import { buildCarParts, spinWheels } from './render/car'
 import { buildGrandstands, buildHills, buildTrees } from './render/scenery'
 import { cameraPose, nextMode, type CameraMode } from './render/cameras'
@@ -22,6 +23,7 @@ import {
 import {
   createLapState, progressFraction, sectorFor, updateLap, type LapState,
 } from './timing/laptimer'
+import { recoveryPose } from './track/recovery'
 import { isOnTrack, startPose } from './track/geometry'
 import type { Track } from './track/schema'
 
@@ -83,8 +85,19 @@ async function main(): Promise<void> {
   }
 
   let cameraMode: CameraMode = 'chase'
+  const hint = new ControlsHint()
+
+  // Возврат на месте, а не на старте: упереться в отбойник можно на любом метре,
+  // и отправлять игрока в начало круга за это — значит заканчивать ему заезд.
+  const recover = (): void => {
+    const pose = recoveryPose(track, vehicle.telemetry().position)
+    vehicle = new Vehicle(undefined, pose, track)
+  }
+
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyR') reset()
+    if (e.code === 'KeyR') recover()
+    if (e.code === 'KeyT') reset()
+    if (e.code === 'KeyH') hint.toggle()
     if (e.code === 'KeyC') cameraMode = nextMode(cameraMode)
   })
 
