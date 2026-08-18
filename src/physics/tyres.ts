@@ -14,9 +14,11 @@ type CompoundSpec = {
 }
 
 const COMPOUNDS: Record<TyreCompound, CompoundSpec> = {
-  soft: { peakGrip: 1.75, optimalTempC: 95, tempWindow: 45, wearRate: 4.0e-4 },
-  medium: { peakGrip: 1.6, optimalTempC: 100, tempWindow: 50, wearRate: 2.5e-4 },
-  hard: { peakGrip: 1.45, optimalTempC: 110, tempWindow: 55, wearRate: 1.6e-4 },
+  // Коэффициент сцепления слика F1 — 1.8-2.0, а не 1.45-1.75: при заниженном
+  // значении разгон упирался в буксование и 0-100 занимал 3.5 с вместо 2.6.
+  soft: { peakGrip: 2.05, optimalTempC: 95, tempWindow: 45, wearRate: 4.0e-4 },
+  medium: { peakGrip: 1.95, optimalTempC: 100, tempWindow: 50, wearRate: 2.5e-4 },
+  hard: { peakGrip: 1.8, optimalTempC: 110, tempWindow: 55, wearRate: 1.6e-4 },
 }
 
 const HEATING = 90

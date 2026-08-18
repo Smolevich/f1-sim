@@ -9,7 +9,10 @@ export const GEAR_RATIOS: number[] = [12.5, 9.6, 7.8, 6.5, 5.6, 4.9, 4.35, 3.9]
 export const MAX_ERS_J = 4_000_000
 export const ERS_BOOST_W = 120_000
 
-const PEAK_TORQUE_NM = 520
+// 678 Нм на пике даёт 1000 л.с. — паспортная мощность связки ДВС+ERS
+// современного болида. Прежние 520 Нм давали 767 л.с., и максималка упиралась
+// в 250 км/ч вместо реальных 340 в Монце.
+const PEAK_TORQUE_NM = 678
 const PEAK_RPM = 10_500
 const MAX_RPM = 15_000
 const IDLE_RPM = 4_000

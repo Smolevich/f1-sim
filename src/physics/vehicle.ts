@@ -88,7 +88,9 @@ export class Vehicle {
   private world: RAPIER.World
   private body: RAPIER.RigidBody
   private tyres: TyreState[]
-  private aero: AeroSetup = { frontWing: 0.5, rearWing: 0.5 }
+  // Монца — самая быстрая трасса календаря, и команды везут сюда минимальные
+  // крылья. С прижимными 0.5 болид упирался в 250 км/ч вместо реальных ~340.
+  private aero: AeroSetup = { frontWing: 0.3, rearWing: 0.3 }
   /** Вертикальная нагрузка на каждое колесо за последний шаг, ньютоны. */
   readonly wheelLoads: number[] = [0, 0, 0, 0]
   /** Боковая сила каждого колеса за прошлый шаг: из неё считается предел диффа. */
