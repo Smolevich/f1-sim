@@ -50,7 +50,7 @@ export function askName(existing: string | null): Promise<string> {
     )
 
     const controls = document.createElement('div')
-    controls.textContent = 'W газ · S тормоз · A/D руль · Space DRS · R сброс'
+    controls.textContent = '3 попытки на лучший круг · W газ · S тормоз · A/D руль · Space DRS · P пауза'
     controls.style.opacity = '.6'
     controls.style.fontSize = '12px'
 

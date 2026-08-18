@@ -6,7 +6,8 @@ import { Vehicle } from './physics/vehicle'
 import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
 import { buildBrakingMarkers, buildRacingLine } from './render/braking'
 import { ControlsHint } from './render/controls-hint'
-import { buildCarParts, spinWheels } from './render/car'
+import { buildCarParts, spinWheels, type CarParts } from './render/car'
+import { loadCarModel } from './render/car-model'
 import { buildGrandstands, buildHills, buildTrees } from './render/scenery'
 import { cameraPose, nextMode, type CameraMode } from './render/cameras'
 import { buildGhostCar } from './render/ghost-car'
@@ -14,12 +15,17 @@ import { Hud } from './render/hud'
 import { LeaderboardPanel } from './render/leaderboard-panel'
 import { Minimap } from './render/minimap'
 import { askName } from './render/menu'
+import { FinishOverlay, PauseOverlay } from './render/overlays'
 import { createScene } from './render/scene'
 import { buildStartLine, buildTrackLines, buildTrackMesh } from './render/track-mesh'
 import { buildBarriers, buildKerbs } from './render/trackside'
 import {
   loadBest, loadGhost, loadName, saveBest, saveGhost, saveName,
 } from './storage/local'
+import {
+  completeAttempt, continueBeyond, createSession, spendAttempt, togglePause,
+  type SessionState,
+} from './session/session'
 import {
   createLapState, progressFraction, sectorFor, updateLap, type LapState,
 } from './timing/laptimer'
@@ -48,10 +54,18 @@ async function main(): Promise<void> {
   scene.add(buildTrees(track))
   scene.add(buildHills(track))
 
-  const carParts = buildCarParts()
+  let carParts: CarParts
+  try {
+    carParts = await loadCarModel()
+  } catch {
+    // Модель не загрузилась (битый файл, нет декодера) — едем на процедурном
+    // болиде: пустой экран хуже грубой машины.
+    carParts = buildCarParts()
+  }
   const carMesh = carParts.group
   scene.add(carMesh)
-  const ghostMesh = buildGhostCar()
+  // Призрак — копия того меша, что реально доехал до сцены, чтобы силуэты совпадали.
+  const ghostMesh = buildGhostCar(carMesh)
   ghostMesh.visible = false
   scene.add(ghostMesh)
 
@@ -77,8 +91,11 @@ async function main(): Promise<void> {
   let sessionMs = 0
   let acc: Accumulator = { pending: 0 }
   let last = performance.now()
+  let session: SessionState = createSession()
+  const pauseOverlay = new PauseOverlay()
+  const finishOverlay = new FinishOverlay()
 
-  const reset = (): void => {
+  const restartLap = (): void => {
     vehicle = makeVehicle()
     lap = createLapState()
     recorder.reset()
@@ -95,8 +112,22 @@ async function main(): Promise<void> {
   }
 
   window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyT') {
+      // Сброс по T тратит попытку: иначе три круга обходятся бесконечным
+      // рестартом за метр до финиша. После финиша T начинает заезд заново,
+      // а не тратит попытку, которой уже нет.
+      session = session.finished ? createSession() : spendAttempt(session)
+      restartLap()
+      return
+    }
+    if (e.code === 'Enter' && session.finished) {
+      session = continueBeyond(session)
+      restartLap()
+      return
+    }
+    if (e.code === 'KeyP' && !session.finished) session = togglePause(session)
+    if (session.paused || session.finished) return
     if (e.code === 'KeyR') recover()
-    if (e.code === 'KeyT') reset()
     if (e.code === 'KeyH') hint.toggle()
     if (e.code === 'KeyC') cameraMode = nextMode(cameraMode)
   })
@@ -105,7 +136,12 @@ async function main(): Promise<void> {
     const frameSeconds = Math.min(0.25, (now - last) / 1000)
     last = now
 
-    const result = stepsFor(acc, frameSeconds)
+    // На паузе и на финише физика не шагает и sessionMs не растёт, но кадр
+    // рисуется: замерший канвас читается как зависание. Накопитель тоже
+    // сбрасывается, иначе после снятия паузы игра догоняет простой рывком.
+    const halted = session.paused || session.finished
+    if (halted) acc = { pending: 0 }
+    const result = halted ? { acc, steps: 0 } : stepsFor(acc, frameSeconds)
     acc = result.acc
 
     let drs = false
@@ -138,6 +174,7 @@ async function main(): Promise<void> {
           saveGhost(track.meta.id, recorded)
           ghost = recorded
         }
+        session = completeAttempt(session, done)
         if (done.valid) {
           void submitLap({
             track: track.meta.id,
@@ -148,6 +185,7 @@ async function main(): Promise<void> {
           }).then(() => board.refresh(track.meta.id))
         }
         recorder.reset()
+        if (session.finished) break
       }
     }
 
@@ -204,8 +242,11 @@ async function main(): Promise<void> {
       sectorBest: [false, false, false],
       valid: lap.valid,
       tyreTempC: tyres.reduce((s, t) => s + t.tempC, 0) / tyres.length,
+      attemptsLeft: session.attemptsLeft,
     })
     minimap.update(telemetry.position, heading)
+    pauseOverlay.update(session.paused)
+    finishOverlay.update(session.finished, session.bestMs ?? best?.timeMs ?? null)
 
     renderer.render(scene, camera)
     requestAnimationFrame(frame)

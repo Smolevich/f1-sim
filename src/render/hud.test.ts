@@ -5,6 +5,7 @@ const model = (over: Partial<HudModel> = {}): HudModel => ({
   speedKmh: 248, gear: 6, rpm: 10_500, drs: false,
   currentMs: 84_310, bestMs: 82_140, deltaMs: -800,
   sector: 1, sectorBest: [true, false, false], valid: true, tyreTempC: 93,
+  attemptsLeft: 3,
   ...over,
 })
 
@@ -37,4 +38,18 @@ test('невалидный круг помечается', () => {
 
 test('номер текущего сектора виден', () => {
   expect(renderHudText(model({ sector: 2 })).sectorLine).toContain('3')
+})
+
+test('первая попытка показывается как 1 из 3', () => {
+  expect(renderHudText(model({ attemptsLeft: 3 })).attemptLine).toBe('ПОПЫТКА 1/3')
+})
+
+test('счётчик попыток растёт по мере их расхода', () => {
+  expect(renderHudText(model({ attemptsLeft: 2 })).attemptLine).toBe('ПОПЫТКА 2/3')
+  expect(renderHudText(model({ attemptsLeft: 1 })).attemptLine).toBe('ПОПЫТКА 3/3')
+})
+
+test('на нуле попыток счётчик не показывает четвёртую', () => {
+  // Регрессия: used + 1 без ограничения давало «ПОПЫТКА 4/3» на финише.
+  expect(renderHudText(model({ attemptsLeft: 0 })).attemptLine).not.toContain('4')
 })

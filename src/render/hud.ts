@@ -1,3 +1,4 @@
+import { TOTAL_ATTEMPTS } from '../session/session'
 import { formatDelta, formatLapTime } from '../timing/format'
 import type { SectorIndex } from '../timing/laptimer'
 
@@ -13,6 +14,7 @@ export type HudModel = {
   sectorBest: [boolean, boolean, boolean]
   valid: boolean
   tyreTempC: number
+  attemptsLeft: number
 }
 
 export type HudText = {
@@ -20,6 +22,7 @@ export type HudText = {
   deltaLine: string
   speedLine: string
   sectorLine: string
+  attemptLine: string
 }
 
 /** Чистая часть HUD: собирает строки, ничего не знает про DOM. */
@@ -47,7 +50,12 @@ export function renderHudText(model: HudModel): HudText {
   })
   const sectorLine = `СЕКТОР ${marks.join(' ')}`
 
-  return { lapLine, deltaLine, speedLine, sectorLine }
+  const used = TOTAL_ATTEMPTS - Math.max(0, model.attemptsLeft)
+  const attemptLine = model.attemptsLeft > 0
+    ? `ПОПЫТКА ${Math.min(TOTAL_ATTEMPTS, used + 1)}/${TOTAL_ATTEMPTS}`
+    : 'ПОПЫТКИ КОНЧИЛИСЬ'
+
+  return { lapLine, deltaLine, speedLine, sectorLine, attemptLine }
 }
 
 const STYLE = `
@@ -68,6 +76,7 @@ export class Hud {
 
   update(model: HudModel): void {
     const t = renderHudText(model)
-    this.root.textContent = `${t.lapLine}\n${t.deltaLine}\n${t.sectorLine}\n${t.speedLine}`
+    this.root.textContent =
+      `${t.attemptLine}\n${t.lapLine}\n${t.deltaLine}\n${t.sectorLine}\n${t.speedLine}`
   }
 }
