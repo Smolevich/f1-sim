@@ -25,7 +25,7 @@ export type LapResult = {
  * означает, что лучший результат не запишется никогда. 45 семплов при 120 Гц —
  * это 0.38 с: короткое касание проходит, полноценный срез нет.
  */
-export const OFF_TRACK_TOLERANCE = 45
+export const OFF_TRACK_TOLERANCE = 144
 
 export function createLapState(): LapState {
   return {
