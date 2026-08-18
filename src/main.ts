@@ -8,6 +8,8 @@ import { buildBrakingMarkers, buildRacingLine } from './render/braking'
 import { ControlsHint } from './render/controls-hint'
 import { spinWheels } from './render/car'
 import { buildF1Car } from './render/f1-car'
+import { loadF1Model } from './render/f1-model'
+import { liveryById } from './render/liveries'
 import { buildGrandstands, buildHills, buildTrees } from './render/scenery'
 import {
   cameraPose, nextMode, SMOOTH_RATE, smoothTowards, type CameraMode, type Vec3,
@@ -22,7 +24,8 @@ import { createScene } from './render/scene'
 import { buildStartLine, buildTrackLines, buildTrackMesh } from './render/track-mesh'
 import { buildBarriers, buildKerbs } from './render/trackside'
 import {
-  loadBest, loadGhost, loadName, loadTrackId, saveBest, saveGhost, saveName, saveTrackId,
+  loadBest, loadGhost, loadLiveryId, loadName, loadTrackId,
+  saveBest, saveGhost, saveLiveryId, saveName, saveTrackId,
 } from './storage/local'
 import {
   completeAttempt, continueBeyond, createSession, spendAttempt, togglePause,
@@ -48,9 +51,11 @@ async function main(): Promise<void> {
 
   // Трасса выбирается до сборки сцены: геометрия, отбойники и миникарта
   // строятся из неё, а перестраивать всё это на лету незачем.
-  const { name, trackId } = await askStart(loadName(), loadTrackId())
+  const { name, trackId, liveryId } = await askStart(loadName(), loadTrackId(), loadLiveryId())
   saveName(name)
   saveTrackId(trackId)
+  saveLiveryId(liveryId)
+  const livery = liveryById(liveryId)
 
   const track: Track = await fetch(`/tracks/${trackId}.json`).then((r) => r.json())
   scene.add(buildTrackMesh(track))
@@ -64,7 +69,12 @@ async function main(): Promise<void> {
   scene.add(buildTrees(track))
   scene.add(buildHills(track))
 
-  const carParts = buildF1Car()
+  // Реальная модель болида; если glb не отдался, остаётся процедурная машина —
+  // играть можно и без неё, а пустая сцена вместо болида игру ломает.
+  const carParts = await loadF1Model(livery.primary).catch((err: unknown) => {
+    console.warn('модель болида не загрузилась, беру процедурную', err)
+    return buildF1Car(livery.primary)
+  })
   const carMesh = carParts.group
   scene.add(carMesh)
   // Призрак — копия того меша, что реально доехал до сцены, чтобы силуэты совпадали.

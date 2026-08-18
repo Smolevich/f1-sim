@@ -7,6 +7,7 @@ export type PersonalBest = {
 
 const NAME_KEY = 'f1sim.name'
 const TRACK_KEY = 'f1sim.track'
+const LIVERY_KEY = 'f1sim.livery'
 const MAX_NAME = 12
 
 export function sanitizeName(raw: string): string {
@@ -24,6 +25,14 @@ export function saveName(name: string): void {
 
 export function loadTrackId(): string | null {
   return read(TRACK_KEY)
+}
+
+export function loadLiveryId(): string | null {
+  return read(LIVERY_KEY)
+}
+
+export function saveLiveryId(liveryId: string): void {
+  write(LIVERY_KEY, liveryId)
 }
 
 export function saveTrackId(trackId: string): void {

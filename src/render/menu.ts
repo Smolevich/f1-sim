@@ -1,8 +1,9 @@
 import { sanitizeName } from '../storage/local'
 import { DEFAULT_TRACK_ID, TRACK_CATALOGUE, isKnownTrackId } from '../track/catalogue'
 import { formatLapTime } from '../timing/format'
+import { DEFAULT_LIVERY, LIVERIES, liveryById } from './liveries'
 
-export type StartChoice = { name: string; trackId: string }
+export type StartChoice = { name: string; trackId: string; liveryId: string }
 
 const OVERLAY = `
 position:fixed;inset:0;z-index:20;display:flex;
@@ -25,7 +26,11 @@ export function trackOptionLabel(id: string): string {
 }
 
 /** Оверлей старта: имя и трасса; резолвится, когда игрок подтвердил. */
-export function askStart(existing: string | null, existingTrack: string | null): Promise<StartChoice> {
+export function askStart(
+  existing: string | null,
+  existingTrack: string | null,
+  existingLivery: string | null = null,
+): Promise<StartChoice> {
   return new Promise((resolve) => {
     const overlay = document.createElement('div')
     overlay.setAttribute('style', OVERLAY)
@@ -58,6 +63,26 @@ export function askStart(existing: string | null, existingTrack: string | null):
     }
     select.value = isKnownTrackId(existingTrack) ? existingTrack! : DEFAULT_TRACK_ID
 
+    const teamHint = document.createElement('div')
+    teamHint.textContent = 'Команда'
+    teamHint.style.opacity = '.7'
+    teamHint.style.fontSize = '13px'
+
+    const teamSelect = document.createElement('select')
+    teamSelect.setAttribute('data-testid', 'team-select')
+    teamSelect.setAttribute(
+      'style',
+      'padding:10px 12px;font:inherit;color:#fff;background:rgba(255,255,255,.08);' +
+      'border:1px solid rgba(255,255,255,.25);border-radius:8px;outline:none;',
+    )
+    for (const livery of LIVERIES) {
+      const option = document.createElement('option')
+      option.value = livery.id
+      option.textContent = livery.name
+      teamSelect.appendChild(option)
+    }
+    teamSelect.value = liveryById(existingLivery ?? DEFAULT_LIVERY.id).id
+
     const hint = document.createElement('div')
     hint.textContent = 'Имя для таблицы рекордов'
     hint.style.opacity = '.7'
@@ -89,8 +114,9 @@ export function askStart(existing: string | null, existingTrack: string | null):
     const submit = (): void => {
       const name = sanitizeName(input.value)
       const trackId = isKnownTrackId(select.value) ? select.value : DEFAULT_TRACK_ID
+      const liveryId = liveryById(teamSelect.value).id
       overlay.remove()
-      resolve({ name, trackId })
+      resolve({ name, trackId, liveryId })
     }
 
     button.addEventListener('click', submit)
@@ -98,7 +124,7 @@ export function askStart(existing: string | null, existingTrack: string | null):
       if ((e as KeyboardEvent).key === 'Enter') submit()
     })
 
-    card.append(title, trackHint, select, hint, input, button, controls)
+    card.append(title, trackHint, select, teamHint, teamSelect, hint, input, button, controls)
     overlay.appendChild(card)
     document.body.appendChild(overlay)
     input.focus()
