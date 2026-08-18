@@ -1,4 +1,8 @@
 import { sanitizeName } from '../storage/local'
+import { DEFAULT_TRACK_ID, TRACK_CATALOGUE, isKnownTrackId } from '../track/catalogue'
+import { formatLapTime } from '../timing/format'
+
+export type StartChoice = { name: string; trackId: string }
 
 const OVERLAY = `
 position:fixed;inset:0;z-index:20;display:flex;
@@ -13,8 +17,15 @@ padding:28px 32px;border:1px solid rgba(255,255,255,.18);
 border-radius:12px;background:rgba(0,0,0,.55);min-width:300px;
 `
 
-/** Оверлей ввода имени; резолвится, когда игрок подтвердил. */
-export function askName(existing: string | null): Promise<string> {
+/** Строка трассы в списке: длина в километрах и реальный рекорд круга. */
+export function trackOptionLabel(id: string): string {
+  const t = TRACK_CATALOGUE.find((e) => e.id === id)
+  if (t === undefined) return id
+  return `${t.name} · ${(t.lengthM / 1000).toFixed(3)} км · ${formatLapTime(t.recordMs)} ${t.recordDriver}`
+}
+
+/** Оверлей старта: имя и трасса; резолвится, когда игрок подтвердил. */
+export function askStart(existing: string | null, existingTrack: string | null): Promise<StartChoice> {
   return new Promise((resolve) => {
     const overlay = document.createElement('div')
     overlay.setAttribute('style', OVERLAY)
@@ -23,8 +34,29 @@ export function askName(existing: string | null): Promise<string> {
     card.setAttribute('style', CARD)
 
     const title = document.createElement('div')
-    title.textContent = 'F1 SIM — МОНЦА'
+    title.textContent = 'F1 SIM — КВАЛИФИКАЦИЯ'
     title.style.fontSize = '20px'
+
+    const trackHint = document.createElement('div')
+    trackHint.textContent = 'Трасса'
+    trackHint.style.opacity = '.7'
+    trackHint.style.fontSize = '13px'
+
+    const select = document.createElement('select')
+    select.setAttribute('data-testid', 'track-select')
+    select.setAttribute(
+      'style',
+      'padding:10px 12px;font:inherit;color:#fff;background:rgba(255,255,255,.08);' +
+      'border:1px solid rgba(255,255,255,.25);border-radius:8px;outline:none;',
+    )
+    for (const entry of TRACK_CATALOGUE) {
+      const option = document.createElement('option')
+      option.value = entry.id
+      option.textContent = trackOptionLabel(entry.id)
+      option.style.color = '#04121f'
+      select.appendChild(option)
+    }
+    select.value = isKnownTrackId(existingTrack) ? existingTrack! : DEFAULT_TRACK_ID
 
     const hint = document.createElement('div')
     hint.textContent = 'Имя для таблицы рекордов'
@@ -56,8 +88,9 @@ export function askName(existing: string | null): Promise<string> {
 
     const submit = (): void => {
       const name = sanitizeName(input.value)
+      const trackId = isKnownTrackId(select.value) ? select.value : DEFAULT_TRACK_ID
       overlay.remove()
-      resolve(name)
+      resolve({ name, trackId })
     }
 
     button.addEventListener('click', submit)
@@ -65,7 +98,7 @@ export function askName(existing: string | null): Promise<string> {
       if ((e as KeyboardEvent).key === 'Enter') submit()
     })
 
-    card.append(title, hint, input, button, controls)
+    card.append(title, trackHint, select, hint, input, button, controls)
     overlay.appendChild(card)
     document.body.appendChild(overlay)
     input.focus()
