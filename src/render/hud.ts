@@ -1,6 +1,6 @@
 import { TOTAL_ATTEMPTS } from '../session/session'
 import { formatDelta, formatLapTime } from '../timing/format'
-import type { SectorIndex } from '../timing/laptimer'
+import { OFF_TRACK_TOLERANCE, type SectorIndex } from '../timing/laptimer'
 
 export type HudModel = {
   speedKmh: number
@@ -15,9 +15,13 @@ export type HudModel = {
   valid: boolean
   tyreTempC: number
   attemptsLeft: number
+  trackName: string
+  trackLengthM: number
+  offTrackCount: number
 }
 
 export type HudText = {
+  titleLine: string
   lapLine: string
   deltaLine: string
   speedLine: string
@@ -27,9 +31,16 @@ export type HudText = {
 
 /** Чистая часть HUD: собирает строки, ничего не знает про DOM. */
 export function renderHudText(model: HudModel): HudText {
-  const lapLine = model.valid
-    ? `КРУГ ${formatLapTime(model.currentMs)}`
-    : `КРУГ ${formatLapTime(model.currentMs)} — СРЕЗКА`
+  const titleLine = `${model.trackName.toUpperCase()} · ${(model.trackLengthM / 1000).toFixed(3)} км`
+
+  // Пока выезды не превысили порог, показываем счётчик, а не приговор: игрок
+  // видит запас и не бросает круг из-за одного касания обочины.
+  const lapTime = formatLapTime(model.currentMs)
+  const lapLine = !model.valid
+    ? `КРУГ ${lapTime} — СРЕЗКА`
+    : model.offTrackCount > 0
+      ? `КРУГ ${lapTime} — ВНЕ ТРАССЫ ${model.offTrackCount}/${OFF_TRACK_TOLERANCE}`
+      : `КРУГ ${lapTime}`
 
   const deltaLine = model.bestMs !== null && model.deltaMs !== null
     ? `ЛУЧШИЙ ${formatLapTime(model.bestMs)}   ${formatDelta(model.deltaMs)}`
@@ -55,7 +66,7 @@ export function renderHudText(model: HudModel): HudText {
     ? `ПОПЫТКА ${Math.min(TOTAL_ATTEMPTS, used + 1)}/${TOTAL_ATTEMPTS}`
     : 'ПОПЫТКИ КОНЧИЛИСЬ'
 
-  return { lapLine, deltaLine, speedLine, sectorLine, attemptLine }
+  return { titleLine, lapLine, deltaLine, speedLine, sectorLine, attemptLine }
 }
 
 const STYLE = `
@@ -76,7 +87,8 @@ export class Hud {
 
   update(model: HudModel): void {
     const t = renderHudText(model)
-    this.root.textContent =
-      `${t.attemptLine}\n${t.lapLine}\n${t.deltaLine}\n${t.sectorLine}\n${t.speedLine}`
+    this.root.textContent = [
+      t.titleLine, t.attemptLine, t.lapLine, t.deltaLine, t.sectorLine, t.speedLine,
+    ].join('\n')
   }
 }

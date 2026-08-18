@@ -6,6 +6,7 @@ const model = (over: Partial<HudModel> = {}): HudModel => ({
   currentMs: 84_310, bestMs: 82_140, deltaMs: -800,
   sector: 1, sectorBest: [true, false, false], valid: true, tyreTempC: 93,
   attemptsLeft: 3,
+  trackName: 'Монца', trackLengthM: 5793, offTrackCount: 0,
   ...over,
 })
 
@@ -52,4 +53,28 @@ test('счётчик попыток растёт по мере их расход
 test('на нуле попыток счётчик не показывает четвёртую', () => {
   // Регрессия: used + 1 без ограничения давало «ПОПЫТКА 4/3» на финише.
   expect(renderHudText(model({ attemptsLeft: 0 })).attemptLine).not.toContain('4')
+})
+
+test('короткое касание травы показывает счётчик, а не срезку', () => {
+  const line = renderHudText(model({ offTrackCount: 12 })).lapLine
+  expect(line).toContain('12')
+  expect(line.toUpperCase()).not.toContain('СРЕЗ')
+})
+
+test('превышение порога помечается срезкой', () => {
+  expect(renderHudText(model({ valid: false })).lapLine.toUpperCase()).toContain('СРЕЗ')
+})
+
+test('чистый круг не показывает счётчик выездов', () => {
+  expect(renderHudText(model({ offTrackCount: 0 })).lapLine).not.toContain('ВНЕ ТРАССЫ')
+})
+
+test('название трассы выводится', () => {
+  // HUD везде в верхнем регистре, поэтому сверяем без учёта регистра.
+  const line = renderHudText(model({ trackName: 'Монца' })).titleLine
+  expect(line.toUpperCase()).toContain('МОНЦА')
+})
+
+test('в названии трассы видна её длина в километрах', () => {
+  expect(renderHudText(model({ trackLengthM: 5793 })).titleLine).toContain('5.793')
 })

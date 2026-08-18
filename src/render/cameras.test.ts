@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { CAMERA_ORDER, cameraPose, nextMode } from './cameras'
+import { CAMERA_ORDER, cameraPose, nextMode, SMOOTH_RATE, smoothTowards } from './cameras'
 
 const at = { x: 0, y: 0, z: 0 }
 
@@ -33,4 +33,27 @@ test('поле зрения расширяется со скоростью', () 
 
 test('поле зрения не растёт без предела', () => {
   expect(cameraPose('chase', at, 0, 500).fov).toBeLessThan(110)
+})
+
+test('сглаживание тянет камеру к цели, но не мгновенно', () => {
+  const from = { x: 0, y: 0, z: 0 }
+  const to = { x: 10, y: 0, z: 0 }
+  const next = smoothTowards(from, to, 0.1, 5)
+  expect(next.x).toBeGreaterThan(0)
+  expect(next.x).toBeLessThan(10)
+})
+
+test('за большой шаг камера почти догоняет цель', () => {
+  const next = smoothTowards({ x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, 1, 5)
+  expect(next.x).toBeGreaterThan(9)
+})
+
+test('нулевая дистанция не двигает камеру', () => {
+  const next = smoothTowards({ x: 5, y: 1, z: 2 }, { x: 5, y: 1, z: 2 }, 0.1, 5)
+  expect(next.x).toBeCloseTo(5, 6)
+})
+
+test('кокпит сглаживается слабее внешней камеры', () => {
+  // Из кокпита задержка читается как расхлябанность, а не как вес болида.
+  expect(SMOOTH_RATE.cockpit).toBeGreaterThan(SMOOTH_RATE.chase)
 })

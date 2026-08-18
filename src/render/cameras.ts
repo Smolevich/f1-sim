@@ -1,4 +1,4 @@
-type Vec3 = { x: number; y: number; z: number }
+export type Vec3 = { x: number; y: number; z: number }
 
 export type CameraMode = 'chase' | 'tcam' | 'cockpit' | 'bonnet'
 
@@ -52,4 +52,31 @@ export function cameraPose(
     },
     fov: Math.min(MAX_FOV, BASE_FOV + speedMs * FOV_GAIN),
   }
+}
+
+/**
+ * Экспоненциальное сглаживание, а не линейное: множитель считается через шаг
+ * времени, поэтому камера ведёт себя одинаково на 60 и 144 кадрах в секунду.
+ * Жёсткая привязка к болиду передаёт ему каждый рывок подвески — именно это
+ * читается как «дёргается».
+ */
+export function smoothTowards(from: Vec3, to: Vec3, dt: number, rate: number): Vec3 {
+  const k = 1 - Math.exp(-rate * dt)
+  return {
+    x: from.x + (to.x - from.x) * k,
+    y: from.y + (to.y - from.y) * k,
+    z: from.z + (to.z - from.z) * k,
+  }
+}
+
+/**
+ * Темп сглаживания по режиму: чем больше, тем жёстче камера привязана к болиду.
+ * Из кокпита и с капота задержка читается как расхлябанность рулёжки, а не как
+ * вес машины, поэтому там сглаживание почти отключено.
+ */
+export const SMOOTH_RATE: Record<CameraMode, number> = {
+  chase: 6,
+  tcam: 9,
+  cockpit: 22,
+  bonnet: 22,
 }

@@ -9,7 +9,9 @@ import { ControlsHint } from './render/controls-hint'
 import { spinWheels } from './render/car'
 import { buildF1Car } from './render/f1-car'
 import { buildGrandstands, buildHills, buildTrees } from './render/scenery'
-import { cameraPose, nextMode, type CameraMode } from './render/cameras'
+import {
+  cameraPose, nextMode, SMOOTH_RATE, smoothTowards, type CameraMode, type Vec3,
+} from './render/cameras'
 import { buildGhostCar } from './render/ghost-car'
 import { Hud } from './render/hud'
 import { LeaderboardPanel } from './render/leaderboard-panel'
@@ -27,7 +29,8 @@ import {
   type SessionState,
 } from './session/session'
 import {
-  createLapState, progressFraction, sectorFor, updateLap, type LapState,
+  createLapState, OFF_TRACK_TOLERANCE, progressFraction, sectorFor, updateLap,
+  type LapState,
 } from './timing/laptimer'
 import { recoveryPose } from './track/recovery'
 import { isOnTrack, startPose } from './track/geometry'
@@ -88,10 +91,17 @@ async function main(): Promise<void> {
   const pauseOverlay = new PauseOverlay()
   const finishOverlay = new FinishOverlay()
 
+  // Позиция камеры и точка взгляда живут между кадрами: сглаживание тянет их к
+  // цели, а не ставит жёстко, иначе камере передаётся каждый рывок подвески.
+  let cameraEye: Vec3 | null = null
+  let cameraLook: Vec3 | null = null
+
   const restartLap = (): void => {
     vehicle = makeVehicle()
     lap = createLapState()
     recorder.reset()
+    cameraEye = null
+    cameraLook = null
   }
 
   let cameraMode: CameraMode = 'chase'
@@ -102,6 +112,8 @@ async function main(): Promise<void> {
   const recover = (): void => {
     const pose = recoveryPose(track, vehicle.telemetry().position)
     vehicle = new Vehicle(undefined, pose, track)
+    cameraEye = null
+    cameraLook = null
   }
 
   window.addEventListener('keydown', (e) => {
@@ -118,11 +130,20 @@ async function main(): Promise<void> {
       restartLap()
       return
     }
-    if (e.code === 'KeyP' && !session.finished) session = togglePause(session)
+    if ((e.code === 'KeyP' || e.code === 'Escape') && !session.finished) {
+      // Без preventDefault браузер по Escape выходит из полноэкранного режима
+      // вместо того, чтобы поставить игру на паузу.
+      e.preventDefault()
+      session = togglePause(session)
+    }
     if (session.paused || session.finished) return
     if (e.code === 'KeyR') recover()
     if (e.code === 'KeyH') hint.toggle()
-    if (e.code === 'KeyC') cameraMode = nextMode(cameraMode)
+    if (e.code === 'KeyC') {
+      cameraMode = nextMode(cameraMode)
+      cameraEye = null
+      cameraLook = null
+    }
   })
 
   const frame = (now: number): void => {
@@ -205,8 +226,15 @@ async function main(): Promise<void> {
       1 - 2 * (orientation.y * orientation.y + orientation.z * orientation.z),
     )
     const pose = cameraPose(cameraMode, telemetry.position, heading, telemetry.speedMs)
-    camera.position.set(pose.eye.x, pose.eye.y, pose.eye.z)
-    camera.lookAt(pose.look.x, pose.look.y, pose.look.z)
+    const rate = SMOOTH_RATE[cameraMode]
+    // На первом кадре и после смены режима догонять нечего: камера ставится
+    // сразу, иначе она приезжает издалека через полсекунды.
+    cameraEye = cameraEye === null ? pose.eye : smoothTowards(cameraEye, pose.eye, frameSeconds, rate)
+    cameraLook = cameraLook === null
+      ? pose.look
+      : smoothTowards(cameraLook, pose.look, frameSeconds, rate)
+    camera.position.set(cameraEye.x, cameraEye.y, cameraEye.z)
+    camera.lookAt(cameraLook.x, cameraLook.y, cameraLook.z)
     if (Math.abs(camera.fov - pose.fov) > 0.1) {
       camera.fov = pose.fov
       camera.updateProjectionMatrix()
@@ -233,9 +261,12 @@ async function main(): Promise<void> {
       deltaMs: best !== null ? lapMs - best.timeMs * fraction : null,
       sector: sectorFor(track, fraction),
       sectorBest: [false, false, false],
-      valid: lap.valid,
+      valid: lap.valid && lap.offTrackCount <= OFF_TRACK_TOLERANCE,
       tyreTempC: tyres.reduce((s, t) => s + t.tempC, 0) / tyres.length,
       attemptsLeft: session.attemptsLeft,
+      trackName: track.meta.name,
+      trackLengthM: track.meta.officialLengthM,
+      offTrackCount: lap.offTrackCount,
     })
     minimap.update(telemetry.position, heading)
     pauseOverlay.update(session.paused)
