@@ -124,7 +124,16 @@ export function askStart(
       if ((e as KeyboardEvent).key === 'Enter') submit()
     })
 
-    card.append(title, trackHint, select, teamHint, teamSelect, hint, input, button, controls)
+    // Атрибуция обязательна по лицензии модели (CC-BY 4.0), см. docs/assets.md.
+    const credit = document.createElement('div')
+    credit.textContent = 'Модель болида: Blender458 · CC BY 4.0'
+    credit.style.opacity = '.45'
+    credit.style.fontSize = '11px'
+
+    card.append(
+      title, trackHint, select, teamHint, teamSelect,
+      hint, input, button, controls, credit,
+    )
     overlay.appendChild(card)
     document.body.appendChild(overlay)
     input.focus()
