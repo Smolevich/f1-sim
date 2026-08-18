@@ -95,3 +95,9 @@ test('отставание от рекорда трассы считается �
   const t = renderHudText(model({ bestMs: 95_000, recordMs: 81_046, recordDriver: 'X' }))
   expect(t.recordLine).toContain('+13.954')
 })
+
+test('счётчик выездов округляется — дробные метры не лезут в HUD', () => {
+  const t = renderHudText(model({ offTrackMetres: 54.42235785086342 }))
+  expect(t.lapLine).toContain('54/')
+  expect(t.lapLine).not.toContain('54.42')
+})

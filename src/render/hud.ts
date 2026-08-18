@@ -42,7 +42,7 @@ export function renderHudText(model: HudModel): HudText {
   const lapLine = !model.valid
     ? `КРУГ ${lapTime} — СРЕЗКА`
     : model.offTrackMetres > 0
-      ? `КРУГ ${lapTime} — ВНЕ ТРАССЫ ${model.offTrackMetres}/${OFF_TRACK_TOLERANCE}`
+      ? `КРУГ ${lapTime} — ВНЕ ТРАССЫ ${Math.round(model.offTrackMetres)}/${OFF_TRACK_TOLERANCE}`
       : `КРУГ ${lapTime}`
 
   const deltaLine = model.bestMs !== null && model.deltaMs !== null
