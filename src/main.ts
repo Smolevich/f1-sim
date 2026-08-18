@@ -44,7 +44,7 @@ async function main(): Promise<void> {
   document.body.style.overflow = 'hidden'
   document.body.appendChild(canvas)
 
-  const { scene, camera, renderer, sun } = createScene(canvas)
+  const { scene, camera, renderer, sun, sky } = createScene(canvas)
   const track: Track = await fetch('/tracks/monza.json').then((r) => r.json())
   scene.add(buildTrackMesh(track))
   scene.add(buildTrackLines(track))
@@ -244,6 +244,9 @@ async function main(): Promise<void> {
     // едет следом — иначе тень пропадает через сотню метров от старта.
     sun.target.position.set(telemetry.position.x, 0, telemetry.position.z)
     sun.position.set(telemetry.position.x + 300, 500, telemetry.position.z + 200)
+    // Купол неба едет за камерой: он радиусом меньше трассы, и на дальнем
+    // конце круга неподвижный купол ушёл бы за спину вместе с горизонтом.
+    sky.position.set(cameraEye.x, 0, cameraEye.z)
     // Болид не рисуем из кокпита: изнутри виден только затылок собственного шлема.
     carMesh.visible = cameraMode !== 'cockpit'
 

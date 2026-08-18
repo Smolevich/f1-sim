@@ -1,15 +1,21 @@
 import * as THREE from 'three'
-import { makeGrassTexture } from './textures'
+import { buildSky, HORIZON_COLOR } from './sky'
+import { makeGrassTexture, makePatchTexture } from './textures'
 
 export function createScene(canvas: HTMLCanvasElement): {
   scene: THREE.Scene
   camera: THREE.PerspectiveCamera
   renderer: THREE.WebGLRenderer
   sun: THREE.DirectionalLight
+  sky: THREE.Mesh
 } {
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x87ceeb)
-  scene.fog = new THREE.Fog(0x87ceeb, 200, 1200)
+  // Фон под цвет горизонта градиента: купол закрывает его целиком, но пока он
+  // не отрисован (первый кадр, редкие ракурсы) плоский цвет не должен выделяться.
+  scene.background = new THREE.Color(HORIZON_COLOR)
+  // Туман кончается за холмами (гряда на 1600 м), а не перед ними: с прежними
+  // 1200 м рельеф горизонта размывался в цвет неба и пропадал зря.
+  scene.fog = new THREE.Fog(HORIZON_COLOR, 350, 2600)
 
   // near=1, а не 0.1: точность буфера глубины падает пропорционально near/far,
   // и с 0.1 на дистанции 800 м она составляет 0.38 м — грубее, чем зазор между
@@ -26,20 +32,22 @@ export function createScene(canvas: HTMLCanvasElement): {
   // Земля под полотном: без неё трасса висит лентой в небе, а болид едет над
   // пустотой. polygonOffset отодвигает газон вглубь на уровне растеризации —
   // одного зазора по высоте мало, трасса тянется на километр от начала координат.
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(10_000, 10_000),
-    new THREE.MeshStandardMaterial({
-      map: makeGrassTexture(),
-      roughness: 1,
-      polygonOffset: true,
-      polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1,
-    }),
-  )
+  const groundMaterial = new THREE.MeshStandardMaterial({
+    map: makeGrassTexture(),
+    roughness: 1,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  })
+  applyGroundPatches(groundMaterial)
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(10_000, 10_000), groundMaterial)
   ground.receiveShadow = true
   ground.rotation.x = -Math.PI / 2
   ground.position.y = -0.3
   scene.add(ground)
+
+  const sky = buildSky()
+  scene.add(sky)
 
   // Заливка приглушена против прежних 1.2: с ней вровень с солнцем тень под
   // болидом высветляется до неразличимой.
@@ -68,5 +76,41 @@ export function createScene(canvas: HTMLCanvasElement): {
     renderer.setSize(window.innerWidth, window.innerHeight)
   })
 
-  return { scene, camera, renderer, sun }
+  return { scene, camera, renderer, sun, sky }
+}
+
+/** Столько пятен на всю землю: пятно должно быть размером с поле, не с газон. */
+const PATCH_REPEAT = 7
+
+/**
+ * Домножает газон на карту крупных пятен прямо в шейдере. Второй меш поверх
+ * земли обошёлся бы отдельным проходом на десять тысяч метров плоскости, а
+ * vertexColors на плоскости из четырёх вершин не даёт пятен вообще.
+ */
+function applyGroundPatches(material: THREE.MeshStandardMaterial): void {
+  const patch = makePatchTexture(256, 1, 0.55)
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.patchMap = { value: patch }
+    // Своя varying, а не vMapUv: в ту уже вкатан repeat травы (200), и пятна
+    // на ней вырождаются в то же зерно. Пятна масштабируются независимо.
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vPatchUv;')
+      .replace(
+        '#include <uv_vertex>',
+        `#include <uv_vertex>
+         vPatchUv = uv * ${PATCH_REPEAT}.0;`,
+      )
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nuniform sampler2D patchMap;\nvarying vec2 vPatchUv;',
+      )
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+         diffuseColor.rgb *= texture2D(patchMap, vPatchUv).rgb;`,
+      )
+  }
+  // Ключ компиляции: без него three переиспользует программу без patchMap.
+  material.customProgramCacheKey = () => 'ground-patches'
 }

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { grandstandSlots, treeSlots } from './scenery'
+import { grandstandSlots, HILL_INNER_M, ridgeHeight, treeSlots } from './scenery'
 import type { Track } from '../track/schema'
 
 const track: Track = JSON.parse(readFileSync('public/tracks/monza.json', 'utf8'))
@@ -30,4 +30,39 @@ test('расстановка детерминированная: два вызо
   const a = treeSlots(track, 50)
   const b = treeSlots(track, 50)
   expect(a[10].x).toBe(b[10].x)
+})
+
+test('гряда неровная: высота гуляет по углу, а не держит один уровень', () => {
+  const heights: number[] = []
+  for (let i = 0; i < 360; i++) heights.push(ridgeHeight((i / 360) * Math.PI * 2, 0.5))
+  expect(Math.max(...heights) - Math.min(...heights)).toBeGreaterThan(60)
+})
+
+test('гряда замкнута: высота на 0 и на 2*PI совпадает', () => {
+  // Разрыв на стыке кольца читается как вертикальная стена на горизонте.
+  expect(ridgeHeight(0, 0.5)).toBeCloseTo(ridgeHeight(Math.PI * 2, 0.5), 6)
+})
+
+test('внутренний край гряды лежит на земле, а не обрывается стеной', () => {
+  expect(ridgeHeight(1.2, 0)).toBeCloseTo(0, 6)
+})
+
+test('гряда выше трибун: иначе горизонт закрыт постройками', () => {
+  let peak = 0
+  for (let i = 0; i < 360; i++) peak = Math.max(peak, ridgeHeight((i / 360) * Math.PI * 2, 0.5))
+  expect(peak).toBeGreaterThan(120)
+})
+
+test('гряда начинается за деревьями, а не на трассе', () => {
+  // Гряда с радиусом меньше трассы вырастала зелёным клином поперёк кадра.
+  const xs = track.centerline.map((p) => p.x)
+  const zs = track.centerline.map((p) => p.z)
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2
+  const cz = (Math.min(...zs) + Math.max(...zs)) / 2
+  let farthest = 0
+  for (const p of track.centerline) {
+    farthest = Math.max(farthest, Math.hypot(p.x - cx, p.z - cz))
+  }
+  const treeReach = farthest + 400
+  expect(HILL_INNER_M).toBeGreaterThan(treeReach)
 })

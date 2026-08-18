@@ -20,7 +20,10 @@ const RIGS: Record<CameraMode, Rig> = {
   chase: { back: 17, height: 7, ahead: 1 },
   tcam: { back: 5.5, height: 2.6, ahead: 8 },
   cockpit: { back: -0.2, height: 1.05, ahead: 12 },
-  bonnet: { back: -0.9, height: 0.95, ahead: 14 },
+  // back -2.4: на -0.9 камера оказывалась внутри монокока и показывала его
+  // изнутри синим конусом. Нос болида кончается около z=+2.6, поэтому глаз
+  // выносим за него.
+  bonnet: { back: -2.4, height: 0.72, ahead: 14 },
 }
 
 export function nextMode(mode: CameraMode): CameraMode {
