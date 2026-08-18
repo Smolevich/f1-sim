@@ -4,7 +4,9 @@ import { KeyboardInput } from './input/keyboard'
 import { submitLap } from './net/leaderboard'
 import { Vehicle } from './physics/vehicle'
 import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
+import { buildBrakingMarkers, buildRacingLine } from './render/braking'
 import { buildCarParts, spinWheels } from './render/car'
+import { buildGrandstands, buildHills, buildTrees } from './render/scenery'
 import { cameraPose, nextMode, type CameraMode } from './render/cameras'
 import { buildGhostCar } from './render/ghost-car'
 import { Hud } from './render/hud'
@@ -38,6 +40,11 @@ async function main(): Promise<void> {
   scene.add(buildStartLine(track))
   scene.add(buildKerbs(track))
   scene.add(buildBarriers(track))
+  scene.add(buildRacingLine(track))
+  scene.add(buildBrakingMarkers(track))
+  scene.add(buildGrandstands(track))
+  scene.add(buildTrees(track))
+  scene.add(buildHills(track))
 
   const carParts = buildCarParts()
   const carMesh = carParts.group

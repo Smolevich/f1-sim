@@ -70,7 +70,7 @@ const REVERSE_FORCE_N = 6_000
 // Отступ и высота повторяют отрисовку в trackside.ts: физическая стенка должна
 // стоять там же, где нарисованная, иначе болид упирается в воздух или проезжает
 // сквозь железо.
-const BARRIER_OFFSET_M = 2.5
+const BARRIER_OFFSET_M = 9
 const BARRIER_HEIGHT_M = 1.4
 const BARRIER_THICKNESS_M = 0.3
 // WHEEL_RADIUS_M импортируется из drivetrain: радиус колеса один и тот же
@@ -151,8 +151,8 @@ export class Vehicle {
         )
         this.world.createCollider(
           RAPIER.ColliderDesc.cuboid(BARRIER_THICKNESS_M / 2, BARRIER_HEIGHT_M / 2, length / 2)
-            .setRestitution(0.1)
-            .setFriction(0.4),
+            .setRestitution(0.0)
+            .setFriction(0.25),
           body,
         )
       }

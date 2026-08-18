@@ -8,7 +8,7 @@ const KERB_CURVATURE = 0.06
 const KERB_WIDTH_M = 1.2
 const KERB_LIFT_M = 0.03
 const BARRIER_HEIGHT_M = 1.4
-const BARRIER_OFFSET_M = 2.5
+const BARRIER_OFFSET_M = 9
 /** Один повтор красно-белой пары на столько метров поребрика. */
 const KERB_STRIPE_M = 2
 
