@@ -6,7 +6,7 @@ import {
 import type { LapResult } from '../timing/laptimer'
 
 const lap = (timeMs: number, valid = true): LapResult => ({
-  timeMs, sectors: [0, 0, 0], valid, offTrackCount: 0,
+  timeMs, sectors: [0, 0, 0], valid, offTrackMetres: 0,
 })
 
 test('заезд начинается с трёх попыток', () => {

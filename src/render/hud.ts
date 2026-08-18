@@ -17,7 +17,7 @@ export type HudModel = {
   attemptsLeft: number
   trackName: string
   trackLengthM: number
-  offTrackCount: number
+  offTrackMetres: number
 }
 
 export type HudText = {
@@ -38,8 +38,8 @@ export function renderHudText(model: HudModel): HudText {
   const lapTime = formatLapTime(model.currentMs)
   const lapLine = !model.valid
     ? `КРУГ ${lapTime} — СРЕЗКА`
-    : model.offTrackCount > 0
-      ? `КРУГ ${lapTime} — ВНЕ ТРАССЫ ${model.offTrackCount}/${OFF_TRACK_TOLERANCE}`
+    : model.offTrackMetres > 0
+      ? `КРУГ ${lapTime} — ВНЕ ТРАССЫ ${model.offTrackMetres}/${OFF_TRACK_TOLERANCE}`
       : `КРУГ ${lapTime}`
 
   const deltaLine = model.bestMs !== null && model.deltaMs !== null

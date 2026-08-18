@@ -264,12 +264,12 @@ async function main(): Promise<void> {
       deltaMs: best !== null ? lapMs - best.timeMs * fraction : null,
       sector: sectorFor(track, fraction),
       sectorBest: [false, false, false],
-      valid: lap.valid && lap.offTrackCount <= OFF_TRACK_TOLERANCE,
+      valid: lap.valid && lap.offTrackMetres <= OFF_TRACK_TOLERANCE,
       tyreTempC: tyres.reduce((s, t) => s + t.tempC, 0) / tyres.length,
       attemptsLeft: session.attemptsLeft,
       trackName: track.meta.name,
       trackLengthM: track.meta.officialLengthM,
-      offTrackCount: lap.offTrackCount,
+      offTrackMetres: lap.offTrackMetres,
     })
     minimap.update(telemetry.position, heading)
     pauseOverlay.update(session.paused)

@@ -6,7 +6,7 @@ const model = (over: Partial<HudModel> = {}): HudModel => ({
   currentMs: 84_310, bestMs: 82_140, deltaMs: -800,
   sector: 1, sectorBest: [true, false, false], valid: true, tyreTempC: 93,
   attemptsLeft: 3,
-  trackName: 'Монца', trackLengthM: 5793, offTrackCount: 0,
+  trackName: 'Монца', trackLengthM: 5793, offTrackMetres: 0,
   ...over,
 })
 
@@ -56,7 +56,7 @@ test('на нуле попыток счётчик не показывает че
 })
 
 test('короткое касание травы показывает счётчик, а не срезку', () => {
-  const line = renderHudText(model({ offTrackCount: 12 })).lapLine
+  const line = renderHudText(model({ offTrackMetres: 12 })).lapLine
   expect(line).toContain('12')
   expect(line.toUpperCase()).not.toContain('СРЕЗ')
 })
@@ -66,7 +66,7 @@ test('превышение порога помечается срезкой', ()
 })
 
 test('чистый круг не показывает счётчик выездов', () => {
-  expect(renderHudText(model({ offTrackCount: 0 })).lapLine).not.toContain('ВНЕ ТРАССЫ')
+  expect(renderHudText(model({ offTrackMetres: 0 })).lapLine).not.toContain('ВНЕ ТРАССЫ')
 })
 
 test('название трассы выводится', () => {
