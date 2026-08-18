@@ -16,13 +16,13 @@ import { buildGhostCar } from './render/ghost-car'
 import { Hud } from './render/hud'
 import { LeaderboardPanel } from './render/leaderboard-panel'
 import { Minimap } from './render/minimap'
-import { askName } from './render/menu'
+import { askStart } from './render/menu'
 import { FinishOverlay, PauseOverlay } from './render/overlays'
 import { createScene } from './render/scene'
 import { buildStartLine, buildTrackLines, buildTrackMesh } from './render/track-mesh'
 import { buildBarriers, buildKerbs } from './render/trackside'
 import {
-  loadBest, loadGhost, loadName, saveBest, saveGhost, saveName,
+  loadBest, loadGhost, loadName, loadTrackId, saveBest, saveGhost, saveName, saveTrackId,
 } from './storage/local'
 import {
   completeAttempt, continueBeyond, createSession, spendAttempt, togglePause,
@@ -45,7 +45,14 @@ async function main(): Promise<void> {
   document.body.appendChild(canvas)
 
   const { scene, camera, renderer, sun, sky } = createScene(canvas)
-  const track: Track = await fetch('/tracks/monza.json').then((r) => r.json())
+
+  // Трасса выбирается до сборки сцены: геометрия, отбойники и миникарта
+  // строятся из неё, а перестраивать всё это на лету незачем.
+  const { name, trackId } = await askStart(loadName(), loadTrackId())
+  saveName(name)
+  saveTrackId(trackId)
+
+  const track: Track = await fetch(`/tracks/${trackId}.json`).then((r) => r.json())
   scene.add(buildTrackMesh(track))
   scene.add(buildTrackLines(track))
   scene.add(buildStartLine(track))
@@ -64,9 +71,6 @@ async function main(): Promise<void> {
   const ghostMesh = buildGhostCar(carMesh)
   ghostMesh.visible = false
   scene.add(ghostMesh)
-
-  const name = await askName(loadName())
-  saveName(name)
 
   const hud = new Hud()
   const board = new LeaderboardPanel(name)
@@ -270,6 +274,8 @@ async function main(): Promise<void> {
       trackName: track.meta.name,
       trackLengthM: track.meta.officialLengthM,
       offTrackMetres: lap.offTrackMetres,
+      recordMs: track.meta.realRecord.timeMs,
+      recordDriver: track.meta.realRecord.driver,
     })
     minimap.update(telemetry.position, heading)
     pauseOverlay.update(session.paused)

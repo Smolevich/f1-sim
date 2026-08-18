@@ -18,6 +18,8 @@ export type HudModel = {
   trackName: string
   trackLengthM: number
   offTrackMetres: number
+  recordMs: number
+  recordDriver: string
 }
 
 export type HudText = {
@@ -27,6 +29,7 @@ export type HudText = {
   speedLine: string
   sectorLine: string
   attemptLine: string
+  recordLine: string
 }
 
 /** Чистая часть HUD: собирает строки, ничего не знает про DOM. */
@@ -61,12 +64,18 @@ export function renderHudText(model: HudModel): HudText {
   })
   const sectorLine = `СЕКТОР ${marks.join(' ')}`
 
+  // Цель заезда — разница с реальным рекордом трассы, поэтому отставание
+  // считается от личного лучшего круга, а не от текущего незаконченного.
+  const recordLine = model.bestMs !== null
+    ? `РЕКОРД ${formatLapTime(model.recordMs)} ${model.recordDriver}   ${formatDelta(model.bestMs - model.recordMs)}`
+    : `РЕКОРД ${formatLapTime(model.recordMs)} ${model.recordDriver}`
+
   const used = TOTAL_ATTEMPTS - Math.max(0, model.attemptsLeft)
   const attemptLine = model.attemptsLeft > 0
     ? `ПОПЫТКА ${Math.min(TOTAL_ATTEMPTS, used + 1)}/${TOTAL_ATTEMPTS}`
     : 'ПОПЫТКИ КОНЧИЛИСЬ'
 
-  return { titleLine, lapLine, deltaLine, speedLine, sectorLine, attemptLine }
+  return { titleLine, lapLine, deltaLine, speedLine, sectorLine, attemptLine, recordLine }
 }
 
 const STYLE = `
@@ -88,7 +97,7 @@ export class Hud {
   update(model: HudModel): void {
     const t = renderHudText(model)
     this.root.textContent = [
-      t.titleLine, t.attemptLine, t.lapLine, t.deltaLine, t.sectorLine, t.speedLine,
+      t.titleLine, t.attemptLine, t.lapLine, t.deltaLine, t.recordLine, t.sectorLine, t.speedLine,
     ].join('\n')
   }
 }

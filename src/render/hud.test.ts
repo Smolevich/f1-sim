@@ -7,6 +7,7 @@ const model = (over: Partial<HudModel> = {}): HudModel => ({
   sector: 1, sectorBest: [true, false, false], valid: true, tyreTempC: 93,
   attemptsLeft: 3,
   trackName: 'Монца', trackLengthM: 5793, offTrackMetres: 0,
+  recordMs: 81_046, recordDriver: 'Rubens Barrichello',
   ...over,
 })
 
@@ -77,4 +78,20 @@ test('название трассы выводится', () => {
 
 test('в названии трассы видна её длина в километрах', () => {
   expect(renderHudText(model({ trackLengthM: 5793 })).titleLine).toContain('5.793')
+})
+
+test('рекорд трассы виден с именем автора', () => {
+  const t = renderHudText(model({ recordMs: 81_046, recordDriver: 'Barrichello' }))
+  expect(t.recordLine).toContain('1:21.046')
+  expect(t.recordLine).toContain('Barrichello')
+})
+
+test('без личного результата показывается только рекорд трассы', () => {
+  const t = renderHudText(model({ bestMs: null, recordMs: 81_046, recordDriver: 'X' }))
+  expect(t.recordLine).toContain('1:21.046')
+})
+
+test('отставание от рекорда трассы считается по личному лучшему', () => {
+  const t = renderHudText(model({ bestMs: 95_000, recordMs: 81_046, recordDriver: 'X' }))
+  expect(t.recordLine).toContain('+13.954')
 })
