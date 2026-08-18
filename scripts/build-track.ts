@@ -3,11 +3,21 @@ import { centerlineLength, validateTrack, type Track, type TrackPoint } from '..
 
 const OVERPASS = 'https://overpass-api.de/api/interpreter'
 
+/**
+ * Источник осевой в OSM. Часть трасс размечена отношением `type=circuit`
+ * (Монца, Спа, Монако, Интерлагос), часть — только россыпью ways без
+ * родительского отношения (Сильверстоун, Сузука): там боевой круг задан
+ * явным списком id, найденным перебором замкнутых контуров нужной длины.
+ */
+type OsmSource =
+  | { kind: 'relation'; relationId: number }
+  | { kind: 'ways'; wayIds: number[] }
+
 type Circuit = {
   id: string
   name: string
   country: string
-  osmRelationId: number
+  source: OsmSource
   /** Участки отношения, которые не входят в боевой круг: пит-лейн, старое кольцо. */
   excludeWayNames: string[]
   officialLengthM: number
@@ -21,12 +31,90 @@ const CIRCUITS: Record<string, Circuit> = {
     id: 'monza',
     name: 'Autodromo Nazionale di Monza',
     country: 'IT',
-    osmRelationId: 284565,
+    source: { kind: 'relation', relationId: 284565 },
     excludeWayNames: ['Pit Lane'],
     officialLengthM: 5793,
     widthM: 12,
     sectorSplits: [0.33, 0.62],
     realRecord: { timeMs: 81_046, driver: 'Rubens Barrichello', year: 2004 },
+  },
+  spa: {
+    id: 'spa',
+    name: 'Circuit de Spa-Francorchamps',
+    country: 'BE',
+    source: { kind: 'relation', relationId: 284560 },
+    excludeWayNames: ['Pit Lane'],
+    officialLengthM: 7004,
+    widthM: 12,
+    sectorSplits: [0.31, 0.64],
+    realRecord: { timeMs: 106_286, driver: 'Valtteri Bottas', year: 2018 },
+  },
+  monaco: {
+    id: 'monaco',
+    name: 'Circuit de Monaco',
+    country: 'MC',
+    source: { kind: 'relation', relationId: 148194 },
+    // Выезд с пит-лейна отдельными ways, в кольцо не входят.
+    excludeWayNames: ['Voie des stands', 'Sortie des stands'],
+    officialLengthM: 3337,
+    widthM: 9,
+    sectorSplits: [0.34, 0.66],
+    realRecord: { timeMs: 72_909, driver: 'Lewis Hamilton', year: 2021 },
+  },
+  silverstone: {
+    id: 'silverstone',
+    name: 'Silverstone Circuit',
+    country: 'GB',
+    // Отношения нет: в рамке лежат ещё Stowe и National, поэтому боевой круг
+    // задан списком — Copse, Maggotts, Becketts, Hangar, Stowe, Club, Abbey…
+    source: {
+      kind: 'ways',
+      wayIds: [
+        3571477, 169730585, 169730587, 169733768, 169730586, 430075118, 169733766,
+        169733769, 169733770, 169848880, 169848884, 169848881, 55224168, 55224167,
+        169854842, 169800226, 169800223, 169800225, 169848882, 169800224, 169800222,
+        169618242, 169618240, 169618241, 169618245, 169609611, 169730588,
+      ],
+    },
+    excludeWayNames: [],
+    officialLengthM: 5891,
+    widthM: 12,
+    sectorSplits: [0.31, 0.62],
+    realRecord: { timeMs: 87_097, driver: 'Max Verstappen', year: 2020 },
+  },
+  suzuka: {
+    id: 'suzuka',
+    name: 'Suzuka International Racing Course',
+    country: 'JP',
+    // Восьмёрка с путепроводом и картодром в той же рамке: отношения нет,
+    // круг перечислен явно от эсок до финишной прямой.
+    source: {
+      kind: 'ways',
+      wayIds: [
+        183391628, 183391634, 183391629, 183391633, 183391631, 183391632, 183391630,
+        183391642, 411295349, 183391641, 183391656, 183391664, 183391655, 183391662,
+        183391658, 183391646, 183391659, 183391651, 411295347, 183391649, 183391647,
+        411295351, 183391648, 411295348, 175231434, 183391652, 183391660, 411289989,
+        183391637, 183391639, 183391638, 183391640, 183391661, 183391665, 183391643,
+        183391645, 183391644, 183391657, 183391636, 183391635,
+      ],
+    },
+    excludeWayNames: [],
+    officialLengthM: 5807,
+    widthM: 12,
+    sectorSplits: [0.33, 0.66],
+    realRecord: { timeMs: 90_983, driver: 'Lewis Hamilton', year: 2019 },
+  },
+  interlagos: {
+    id: 'interlagos',
+    name: 'Autódromo José Carlos Pace',
+    country: 'BR',
+    source: { kind: 'relation', relationId: 6781071 },
+    excludeWayNames: ['Pit Lane'],
+    officialLengthM: 4309,
+    widthM: 12,
+    sectorSplits: [0.33, 0.65],
+    realRecord: { timeMs: 70_540, driver: 'Max Verstappen', year: 2018 },
   },
 }
 
@@ -39,8 +127,10 @@ type OsmWay = { id: number; tags?: Record<string, string>; geometry: LatLon[] }
  * произвольном направлении, поэтому узлы нельзя просто ссыпать в один массив:
  * получится каша. Участки сшиваются голова-к-хвосту в замкнутый контур.
  */
-async function fetchCenterline(relationId: number, excludeNames: string[]): Promise<LatLon[]> {
-  const query = `[out:json][timeout:90];rel(${relationId});way(r);out geom;`
+async function fetchCenterline(source: OsmSource, excludeNames: string[]): Promise<LatLon[]> {
+  const query = source.kind === 'relation'
+    ? `[out:json][timeout:90];rel(${source.relationId});way(r);out geom;`
+    : `[out:json][timeout:90];way(id:${source.wayIds.join(',')});out geom;`
   // Без User-Agent Apache перед Overpass отвечает 406 — Node fetch его не шлёт по умолчанию.
   const res = await fetch(OVERPASS, {
     method: 'POST',
@@ -48,14 +138,20 @@ async function fetchCenterline(relationId: number, excludeNames: string[]): Prom
     body: query,
   })
   if (!res.ok) throw new Error(`Overpass ответил ${res.status}`)
-  const data = await res.json() as { elements: OsmWay[] }
+  // При перегрузке Overpass отдаёт HTML-страницу с ошибкой вместо JSON.
+  const body = await res.text()
+  if (body.trimStart().startsWith('<')) {
+    throw new Error('Overpass вернул HTML вместо JSON — перегружен, повторить через 30 с')
+  }
+  const data = JSON.parse(body) as { elements: OsmWay[] }
 
   const pool = data.elements
     .filter((w): w is OsmWay => Array.isArray(w.geometry) && w.geometry.length > 1)
     .filter((w) => !excludeNames.includes(w.tags?.name ?? ''))
     .map((w) => ({ name: w.tags?.name ?? String(w.id), geometry: w.geometry.slice() }))
 
-  if (pool.length === 0) throw new Error(`в отношении ${relationId} нет участков с геометрией`)
+  const label = source.kind === 'relation' ? `отношении ${source.relationId}` : 'списке ways'
+  if (pool.length === 0) throw new Error(`в ${label} нет участков с геометрией`)
 
   const first = pool.shift()!
   let path = first.geometry.slice()
@@ -127,7 +223,7 @@ async function main(): Promise<void> {
   const circuit = CIRCUITS[id]
   if (!circuit) throw new Error(`неизвестная трасса: ${id}. Есть: ${Object.keys(CIRCUITS).join(', ')}`)
 
-  const raw = await fetchCenterline(circuit.osmRelationId, circuit.excludeWayNames)
+  const raw = await fetchCenterline(circuit.source, circuit.excludeWayNames)
   const centerline = smooth(toMeters(raw), 2)
 
   const track: Track = {
