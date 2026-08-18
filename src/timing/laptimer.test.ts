@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from 'vitest'
 import {
-  createLapState, progressFraction, sectorFor, updateLap,
+  createLapState, OFF_TRACK_TOLERANCE, progressFraction, sectorFor, updateLap,
 } from './laptimer'
 import { centerlineLength, type Track, type TrackPoint } from '../track/schema'
 
@@ -76,10 +76,16 @@ test('срезка делает круг невалидным', () => {
   const t = ring()
   let s = createLapState()
   let completed = null
-  for (const [f, ms, on] of [
-    [0.1, 0, true], [0.5, 30_000, false], [0.9, 60_000, true], [0.05, 90_000, true],
-  ] as const) {
-    const r = updateLap(s, t, at(t, f), ms, on)
+  let ms = 0
+  // Выезд длиннее порога: столько семплов подряд вне полотна — это уже не
+  // касание обочины, а езда напрямик.
+  for (let i = 0; i <= OFF_TRACK_TOLERANCE; i++) {
+    ms += 10
+    s = updateLap(s, t, at(t, 0.5), ms, false).state
+  }
+  for (const [f, step] of [[0.9, 30_000], [0.05, 30_000]] as const) {
+    ms += step
+    const r = updateLap(s, t, at(t, f), ms, true)
     s = r.state
     if (r.completed) completed = r.completed
   }
@@ -90,11 +96,16 @@ test('срезка не отмывается чистым остатком кр�
   const t = ring()
   let s = createLapState()
   let completed = null
-  // выезд в первом секторе, дальше всё чисто
-  for (const [f, ms, on] of [
-    [0.1, 0, false], [0.5, 30_000, true], [0.9, 60_000, true], [0.05, 90_000, true],
-  ] as const) {
-    const r = updateLap(s, t, at(t, f), ms, on)
+  let ms = 0
+  // Срез в первом секторе сверх порога, дальше весь круг чисто: счётчик выездов
+  // не обнуляется до финиша, иначе аккуратный остаток снимал бы наказание.
+  for (let i = 0; i <= OFF_TRACK_TOLERANCE; i++) {
+    ms += 10
+    s = updateLap(s, t, at(t, 0.1), ms, false).state
+  }
+  for (const [f, step] of [[0.5, 30_000], [0.9, 30_000], [0.05, 30_000]] as const) {
+    ms += step
+    const r = updateLap(s, t, at(t, f), ms, true)
     s = r.state
     if (r.completed) completed = r.completed
   }
@@ -148,4 +159,54 @@ test('на неравномерных узлах доля по длине рас
   const i = 50
   const byIndex = i / real.centerline.length
   expect(Math.abs(progressFraction(real, real.centerline[i]) - byIndex)).toBeGreaterThan(0.05)
+})
+
+test('одно короткое касание травы не убивает круг', () => {
+  const t = ring()
+  let s = createLapState()
+  let completed = null
+  // один семпл вне трассы из многих
+  const path: [number, boolean][] = [
+    [0.1, true], [0.3, true], [0.45, false], [0.5, true],
+    [0.8, true], [0.95, true], [0.02, true],
+  ]
+  let ms = 0
+  for (const [f, on] of path) {
+    ms += 10_000
+    const r = updateLap(s, t, at(t, f), ms, on)
+    s = r.state
+    if (r.completed) completed = r.completed
+  }
+  expect(completed!.valid).toBe(true)
+})
+
+test('длительный выезд убивает круг', () => {
+  const t = ring()
+  let s = createLapState()
+  let completed = null
+  let ms = 0
+  s = updateLap(s, t, at(t, 0.1), (ms += 1000), true).state
+  // Много семплов вне трассы подряд — сверх порога терпимости.
+  for (let i = 0; i <= OFF_TRACK_TOLERANCE; i++) {
+    ms += 10
+    s = updateLap(s, t, at(t, 0.5), ms, false).state
+  }
+  for (const [f, step] of [[0.8, 20_000], [0.95, 20_000], [0.02, 20_000]] as const) {
+    ms += step
+    const r = updateLap(s, t, at(t, f), ms, true)
+    s = r.state
+    if (r.completed) completed = r.completed
+  }
+  expect(completed!.valid).toBe(false)
+})
+
+test('счётчик выездов растёт', () => {
+  const t = ring()
+  let s = createLapState()
+  let ms = 0
+  for (const [f, on] of [[0.1, true], [0.2, false], [0.3, false]] as [number, boolean][]) {
+    ms += 10_000
+    s = updateLap(s, t, at(t, f), ms, on).state
+  }
+  expect(s.offTrackCount).toBeGreaterThan(0)
 })

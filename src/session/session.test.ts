@@ -3,8 +3,11 @@ import {
   completeAttempt, continueBeyond, createSession, spendAttempt, togglePause,
   TOTAL_ATTEMPTS,
 } from './session'
+import type { LapResult } from '../timing/laptimer'
 
-const lap = (timeMs: number, valid = true) => ({ timeMs, sectors: [0, 0, 0] as [number, number, number], valid })
+const lap = (timeMs: number, valid = true): LapResult => ({
+  timeMs, sectors: [0, 0, 0], valid, offTrackCount: 0,
+})
 
 test('заезд начинается с трёх попыток', () => {
   expect(createSession().attemptsLeft).toBe(TOTAL_ATTEMPTS)

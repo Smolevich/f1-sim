@@ -7,16 +7,31 @@ export type LapState = {
   sectorEntryMs: [number, number, number]
   lastSector: SectorIndex | null
   valid: boolean
+  /** Сколько семплов болид провёл вне полотна за текущий круг. */
+  offTrackCount: number
 }
 
 export type LapResult = {
   timeMs: number
   sectors: [number, number, number]
   valid: boolean
+  offTrackCount: number
 }
 
+/**
+ * Порог выездов, после которого круг не засчитывается. В реальной F1 время
+ * снимают за выезд всеми четырьмя колёсами, и обычно за повторные нарушения,
+ * а не за одно касание обочины. Аннулировать круг по первому семплу вне полотна
+ * означает, что лучший результат не запишется никогда. 45 семплов при 120 Гц —
+ * это 0.38 с: короткое касание проходит, полноценный срез нет.
+ */
+export const OFF_TRACK_TOLERANCE = 45
+
 export function createLapState(): LapState {
-  return { startedAtMs: null, sectorEntryMs: [0, 0, 0], lastSector: null, valid: true }
+  return {
+    startedAtMs: null, sectorEntryMs: [0, 0, 0], lastSector: null,
+    valid: true, offTrackCount: 0,
+  }
 }
 
 /**
@@ -57,9 +72,9 @@ export function sectorFor(track: Track, fraction: number): SectorIndex {
 }
 
 /**
- * Круг замыкается при переходе из третьего сектора в первый. Валидность теряется
- * при любом выезде за границы полотна: восстановить её внутри круга нельзя,
- * иначе срезку можно «отмыть», доехав остаток чисто.
+ * Круг замыкается при переходе из третьего сектора в первый. Выезды копятся в
+ * счётчике за весь круг и не обнуляются чистым остатком: иначе срезку можно
+ * «отмыть», доехав до финиша аккуратно.
  */
 export function updateLap(
   state: LapState,
@@ -72,7 +87,7 @@ export function updateLap(
   const sector = sectorFor(track, fraction)
   const next: LapState = { ...state, sectorEntryMs: [...state.sectorEntryMs] }
 
-  if (!onTrack) next.valid = false
+  if (!onTrack) next.offTrackCount += 1
 
   if (next.lastSector === null) {
     next.lastSector = sector
@@ -101,7 +116,10 @@ export function updateLap(
       next.sectorEntryMs[2] - next.sectorEntryMs[1],
       nowMs - next.sectorEntryMs[2],
     ],
-    valid: next.valid && next.sectorEntryMs[2] > next.sectorEntryMs[1],
+    valid: next.valid
+      && next.offTrackCount <= OFF_TRACK_TOLERANCE
+      && next.sectorEntryMs[2] > next.sectorEntryMs[1],
+    offTrackCount: next.offTrackCount,
   }
 
   return {
@@ -110,6 +128,7 @@ export function updateLap(
       sectorEntryMs: [nowMs, nowMs, nowMs],
       lastSector: 0,
       valid: true,
+      offTrackCount: 0,
     },
     completed,
   }
