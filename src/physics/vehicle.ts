@@ -38,7 +38,11 @@ const SUSPENSION_TRAVEL_M = SUSPENSION_REST_M + 0.1
 const SUSPENSION_STIFFNESS = 90_000
 const SUSPENSION_DAMPING = 6_000
 const MAX_STEER_RAD = 0.3
-const BRAKE_FORCE_N = 28_000
+// 46 кН: реальный болид тормозит на пределе СЦЕПЛЕНИЯ, а не колодок, поэтому
+// колодочная сила должна быть заведомо больше того, что удержат шины
+// (около 25 кН на 250 км/ч с прижимом). С прежними 28 кН потолок задавали
+// колодки, и пиковое замедление не доходило до реальных 5 g.
+const BRAKE_FORCE_N = 46_000
 // Проскальзывание, эквивалентное полной загрузке пятна контакта: при нём
 // равновесие тепловой модели tyres.ts (90·s = 0.6·(T−25)) даёт рабочие 100 °C.
 const WORKING_SLIP = 0.5
@@ -115,7 +119,10 @@ export class Vehicle {
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(spawn.x, spawn.y + SUSPENSION_REST_M + 0.2, spawn.z)
         .setRotation(yawQuaternion(heading))
-        .setLinearDamping(0.05)
+        // Демпфирование Rapier выключено: сопротивление воздуха уже считает aero.ts,
+        // а этот множитель добавлял поверх ещё 3225 Н на максималке — ровно
+        // столько, сколько составлял весь запас тяги, и скорость упиралась в 291.
+        .setLinearDamping(0)
         .setAngularDamping(0.6),
     )
     this.world.createCollider(
