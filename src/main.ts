@@ -6,8 +6,8 @@ import { Vehicle } from './physics/vehicle'
 import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
 import { buildBrakingMarkers, buildRacingLine } from './render/braking'
 import { ControlsHint } from './render/controls-hint'
-import { buildCarParts, spinWheels, type CarParts } from './render/car'
-import { loadCarModel } from './render/car-model'
+import { spinWheels } from './render/car'
+import { buildF1Car } from './render/f1-car'
 import { buildGrandstands, buildHills, buildTrees } from './render/scenery'
 import { cameraPose, nextMode, type CameraMode } from './render/cameras'
 import { buildGhostCar } from './render/ghost-car'
@@ -54,14 +54,7 @@ async function main(): Promise<void> {
   scene.add(buildTrees(track))
   scene.add(buildHills(track))
 
-  let carParts: CarParts
-  try {
-    carParts = await loadCarModel()
-  } catch {
-    // Модель не загрузилась (битый файл, нет декодера) — едем на процедурном
-    // болиде: пустой экран хуже грубой машины.
-    carParts = buildCarParts()
-  }
+  const carParts = buildF1Car()
   const carMesh = carParts.group
   scene.add(carMesh)
   // Призрак — копия того меша, что реально доехал до сцены, чтобы силуэты совпадали.
