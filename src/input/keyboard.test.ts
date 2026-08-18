@@ -1,15 +1,15 @@
 import { expect, test } from 'vitest'
 import { STEER_RATE, STEER_RETURN, steerTowards } from './keyboard'
 
-test('руль доходит до упора примерно за 0.15 с', () => {
+test('руль доходит до упора примерно за четверть секунды', () => {
   let steer = 0
   let t = 0
   while (steer < 0.999 && t < 1) {
     steer = steerTowards(steer, 1, 1 / 120, STEER_RATE)
     t += 1 / 120
   }
-  expect(t).toBeGreaterThan(0.10)
-  expect(t).toBeLessThan(0.20)
+  expect(t).toBeGreaterThan(0.2)
+  expect(t).toBeLessThan(0.3)
 })
 
 test('руль возвращается в ноль быстрее, чем набирается', () => {

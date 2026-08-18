@@ -38,6 +38,19 @@ const SUSPENSION_TRAVEL_M = SUSPENSION_REST_M + 0.1
 const SUSPENSION_STIFFNESS = 90_000
 const SUSPENSION_DAMPING = 6_000
 const MAX_STEER_RAD = 0.3
+
+/**
+ * Предел угла поворота колёс по скорости. На 200 км/ч физически полезны 2.6°:
+ * больший угол требует бокового ускорения выше того, что держат шины, и просто
+ * срывает передок. Игра, позволяющая полные 17° на любой скорости, ощущается
+ * дёрганой и уходит в занос от каждого нажатия — поэтому ограничение по
+ * скорости есть во всех гоночных симуляторах.
+ */
+export function steerLimitForSpeed(speedMs: number, wheelbaseM: number, maxRad: number): number {
+  if (speedMs < 5) return maxRad
+  const maxLateralMs2 = 4 * 9.81
+  return Math.min(maxRad, Math.atan((wheelbaseM * maxLateralMs2) / (speedMs * speedMs)))
+}
 // 46 кН: реальный болид тормозит на пределе СЦЕПЛЕНИЯ, а не колодок, поэтому
 // колодочная сила должна быть заведомо больше того, что удержат шины
 // (около 25 кН на 250 км/ч с прижимом). С прежними 28 кН потолок задавали
@@ -198,7 +211,8 @@ export class Vehicle {
 
     const gear = input.gear > 0 ? input.gear : bestGear(speedMs)
     const rpm = rpmFor(speedMs, gear)
-    const steerRad = clamp(input.steer, -1, 1) * MAX_STEER_RAD
+    const steerLimit = steerLimitForSpeed(speedMs, WHEELBASE_M, MAX_STEER_RAD)
+    const steerRad = clamp(input.steer, -1, 1) * steerLimit
 
     // Открытый дифференциал: он не может дать загруженному колесу больше момента,
     // чем принимает разгруженное. Без этого предела внутреннее заднее колесо в
