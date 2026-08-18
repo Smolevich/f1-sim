@@ -202,9 +202,9 @@ export function buildGrandstands(track: Track): THREE.Group {
 
 /** Ярусы кроны: радиус, низ и верх по высоте, доля светлого в цвете листвы. */
 const CROWN_TIERS: { radius: number; bottom: number; top: number; tint: number }[] = [
-  { radius: 3.2, bottom: 4.5, top: 7.2, tint: 0.0 },
-  { radius: 2.3, bottom: 7.2, top: 9.2, tint: 0.5 },
-  { radius: 1.4, bottom: 9.2, top: 10.8, tint: 1.0 },
+  { radius: 3.5, bottom: 4.4, top: 7.6, tint: 0.0 },
+  { radius: 2.5, bottom: 7.6, top: 10.0, tint: 0.5 },
+  { radius: 1.5, bottom: 10.0, top: 12.0, tint: 1.0 },
 ]
 
 const TREE_TILT_RAD = 0.07
@@ -387,9 +387,25 @@ export function buildHills(track: Track): THREE.Group {
     }
   }
 
+  // Цвет по высоте: подошва тёмно-зелёная, гребни выцветают в дымку. Ровно
+  // закрашенная гряда читается силуэтом из картона, сколько её ни displace.
+  const colors = new Float32Array((HILL_SEGMENTS + 1) * (HILL_BANDS + 1) * 3)
+  const foot = new THREE.Color(0x5f7f52)
+  const crest = new THREE.Color(0x93ad7e)
+  const tone = new THREE.Color()
+  const peak = ridgeHeight(0, 1) || 1
+  for (let i = 0; i < colors.length / 3; i++) {
+    const h = Math.max(0, Math.min(1, (positions[i * 3 + 1] + 12) / peak))
+    tone.copy(foot).lerp(crest, h)
+    colors[i * 3] = tone.r
+    colors[i * 3 + 1] = tone.g
+    colors[i * 3 + 2] = tone.b
+  }
+
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
   geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   geometry.setIndex(indices)
   geometry.computeVertexNormals()
 
@@ -397,9 +413,7 @@ export function buildHills(track: Track): THREE.Group {
   // а мелкий повтор на двух километрах вырождается в муар.
   const grass = makeGrassTexture()
   grass.repeat.set(24, 3)
-  const material = new THREE.MeshStandardMaterial({
-    map: grass, color: 0x8fa07e, roughness: 1, side: THREE.DoubleSide,
-  })
+  const material = new THREE.MeshBasicMaterial({ map: grass, vertexColors: true })
   const ridge = new THREE.Mesh(geometry, material)
   ridge.frustumCulled = false
   group.add(ridge)
