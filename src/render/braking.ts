@@ -116,7 +116,7 @@ export function buildRacingLine(track: Track): THREE.Mesh {
     for (const d of [180, 150, 120, 90, 60, 30, 0]) entries.add(stepBack(track, entry, d))
   }
 
-  const width = 0.5
+  const width = 1.1
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n
     const a = cl[i], b = cl[j]
@@ -125,13 +125,17 @@ export function buildRacingLine(track: Track): THREE.Mesh {
     const nx = -dz / len * width, nz = dx / len * width
 
     const braking = entries.has(i) || curvature(track, i) >= CORNER_CURVATURE
-    const c: [number, number, number] = braking ? [0.85, 0.12, 0.12] : [0.15, 0.7, 0.25]
+    const c: [number, number, number] = braking ? [1.0, 0.1, 0.1] : [0.1, 0.95, 0.2]
 
+    // Линия смещена от осевой: по центру её полностью закрывает болид,
+    // и подсказка не видна именно тогда, когда нужна.
+    const shift = 3.0
+    const ox = -dz / len * shift, oz = dx / len * shift
     const quad: TrackPoint[] = [
-      { x: a.x + nx, y: a.y, z: a.z + nz },
-      { x: a.x - nx, y: a.y, z: a.z - nz },
-      { x: b.x + nx, y: b.y, z: b.z + nz },
-      { x: b.x - nx, y: b.y, z: b.z - nz },
+      { x: a.x + ox + nx, y: a.y, z: a.z + oz + nz },
+      { x: a.x + ox - nx, y: a.y, z: a.z + oz - nz },
+      { x: b.x + ox + nx, y: b.y, z: b.z + oz + nz },
+      { x: b.x + ox - nx, y: b.y, z: b.z + oz - nz },
     ]
     const order = [0, 1, 2, 1, 3, 2]
     for (const o of order) {
@@ -144,5 +148,12 @@ export function buildRacingLine(track: Track): THREE.Mesh {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3))
   geometry.computeVertexNormals()
-  return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true }))
+    // DoubleSide обязателен: намотка вершин на левом и правом краю зеркальна,
+  // и при FrontSide половина полосы отсекается backface culling — ровно та
+  // же ловушка, что съела правуюбелую линию разметки.
+  return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  }))
 }
