@@ -206,19 +206,26 @@ export async function loadF1Model(colour: number): Promise<LoadedCar> {
   // наружу и увёл бы колесо через всю машину на противоположный борт.
   wheelGeometries.forEach((geometries, index) => {
     const axle = wheelAxle(CORNERS[index])
-    // Два узла: внутренний сдвигает геометрию на ось колеса, внешний
-    // масштабирует. В одном узле сдвиг применился бы уже после масштаба и
-    // колесо уехало бы со своего места.
-    const centred = new THREE.Group()
-    centred.position.set(-axle.x, -axle.y, -axle.z)
+    // Колесо центрируется по фактическому центру своих вершин, а не по
+    // расчётной оси: ступица вращается вокруг нуля, и любое остаточное
+    // смещение уносит колесо по орбите вместо вращения на месте.
+    // Ось берётся по Y и Z (центр круга), по X — середина ширины колеса.
+    const centre = new THREE.Box3()
     for (const geometry of geometries) {
-      const mesh = new THREE.Mesh(geometry, tyreMaterial)
-      mesh.castShadow = true
-      centred.add(mesh)
+      geometry.computeBoundingBox()
+      if (geometry.boundingBox !== null) centre.union(geometry.boundingBox)
     }
+    const pivot = centre.getCenter(new THREE.Vector3())
+    void axle
+
     const holder = new THREE.Group()
     holder.scale.set(SCALE * BODY_WIDTH_SQUEEZE, SCALE, SCALE)
-    holder.add(centred)
+    for (const geometry of geometries) {
+      geometry.translate(-pivot.x, -pivot.y, -pivot.z)
+      const mesh = new THREE.Mesh(geometry, tyreMaterial)
+      mesh.castShadow = true
+      holder.add(mesh)
+    }
     hubs[index].add(holder)
   })
 

@@ -87,3 +87,26 @@ test('меш вне колеса даёт долю 0', () => {
 test('пустая геометрия не роняет расчёт доли', () => {
   expect(fractionInsideWheel(new THREE.BufferGeometry(), WHEEL)).toBe(0)
 })
+
+test('центрированная геометрия вращается на месте, а не по орбите', () => {
+  // Регрессия: сдвиг вносился узлом-родителем, и вращающаяся ступица уносила
+  // колесо по кругу вокруг центра машины вместо вращения вокруг своей оси.
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+    1.22, 0.63, 1.18, 1.22, 0.03, 1.18, 1.22, 0.33, 1.48,
+  ], 3))
+  geometry.computeBoundingBox()
+  const centre = geometry.boundingBox!.getCenter(new THREE.Vector3())
+  geometry.translate(-centre.x, -centre.y, -centre.z)
+
+  const hub = new THREE.Group()
+  hub.position.set(0.61, 0.36, 1.40)
+  hub.add(new THREE.Mesh(geometry))
+
+  const before = new THREE.Box3().setFromObject(hub).getCenter(new THREE.Vector3())
+  hub.rotation.x = Math.PI / 3
+  hub.updateMatrixWorld(true)
+  const after = new THREE.Box3().setFromObject(hub).getCenter(new THREE.Vector3())
+
+  expect(after.distanceTo(before)).toBeLessThan(1e-6)
+})
