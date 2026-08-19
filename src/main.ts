@@ -4,6 +4,7 @@ import { KeyboardInput } from './input/keyboard'
 import { submitLap } from './net/leaderboard'
 import { Vehicle } from './physics/vehicle'
 import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
+import { blendFactor, lerpPosition, slerpOrientation } from './render/interpolate'
 import { buildBrakingMarkers, buildRacingLine } from './render/braking'
 import { ControlsHint } from './render/controls-hint'
 import { spinWheels } from './render/car'
@@ -107,6 +108,12 @@ async function main(): Promise<void> {
 
   // Позиция камеры и точка взгляда живут между кадрами: сглаживание тянет их к
   // цели, а не ставит жёстко, иначе камере передаётся каждый рывок подвески.
+  // Отладочный хук для замеров плавности: тесты и скрипты подписываются на
+  // покадровые значения, не влезая в игровой цикл.
+  const probe = (window as unknown as {
+    __probe?: (t: unknown, c: unknown) => void
+  }).__probe ?? null
+
   let cameraEye: Vec3 | null = null
   let cameraLook: Vec3 | null = null
 
@@ -176,6 +183,12 @@ async function main(): Promise<void> {
     // сбрасывается, иначе после снятия паузы игра догоняет простой рывком.
     const halted = session.paused || session.finished
     if (halted) acc = { pending: 0 }
+
+    // Состояние до шагов — вторая точка для интерполяции кадра.
+    const before = {
+      position: { ...vehicle.telemetry().position },
+      orientation: { ...vehicle.orientation() },
+    }
     const result = halted ? { acc, steps: 0 } : stepsFor(acc, frameSeconds)
     acc = result.acc
 
@@ -226,8 +239,17 @@ async function main(): Promise<void> {
 
     const telemetry = vehicle.telemetry()
     const orientation = vehicle.orientation()
-    carMesh.position.set(telemetry.position.x, telemetry.position.y, telemetry.position.z)
-    carMesh.quaternion.set(orientation.x, orientation.y, orientation.z, orientation.w)
+
+    // Кадр рисует положение между предыдущим и текущим шагом физики: без
+    // этого движение дёргается на 0.28 м в среднем и до метра в пике, потому
+    // что на кадр приходится то один шаг, то два.
+    const blend = result.steps === 0 ? 1 : blendFactor(acc.pending, FIXED_STEP)
+    const shown = lerpPosition(before.position, telemetry.position, blend)
+    const shownRot = slerpOrientation(before.orientation, orientation, blend)
+
+    if (probe !== null) probe({ ...telemetry, position: shown }, camera.position)
+    carMesh.position.set(shown.x, shown.y, shown.z)
+    carMesh.quaternion.set(shownRot.x, shownRot.y, shownRot.z, shownRot.w)
     spinWheels(carParts, telemetry.speedMs, lastSteer, frameSeconds)
 
     const lapMs = sessionMs - (lap.startedAtMs ?? sessionMs)
@@ -246,7 +268,7 @@ async function main(): Promise<void> {
       2 * (orientation.w * orientation.y + orientation.x * orientation.z),
       1 - 2 * (orientation.y * orientation.y + orientation.z * orientation.z),
     )
-    const pose = cameraPose(cameraMode, telemetry.position, heading, telemetry.speedMs)
+    const pose = cameraPose(cameraMode, shown, heading, telemetry.speedMs)
     const rate = SMOOTH_RATE[cameraMode]
     // На первом кадре и после смены режима догонять нечего: камера ставится
     // сразу, иначе она приезжает издалека через полсекунды.

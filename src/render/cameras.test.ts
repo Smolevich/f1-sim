@@ -57,3 +57,15 @@ test('кокпит сглаживается слабее внешней каме
   // Из кокпита задержка читается как расхлябанность, а не как вес болида.
   expect(SMOOTH_RATE.cockpit).toBeGreaterThan(SMOOTH_RATE.chase)
 })
+
+test('ближние камеры сглажены достаточно, чтобы не дёргаться', () => {
+  // Регрессия: при ставке 22 рывок камеры в кокпите был 0.17 м со скачками
+  // до 0.54 м — в шесть раз больше, чем у chase, и читался как дрожание.
+  expect(SMOOTH_RATE.cockpit).toBeLessThanOrEqual(14)
+  expect(SMOOTH_RATE.bonnet).toBeLessThanOrEqual(14)
+})
+
+test('ближние камеры всё же жёстче внешних — иначе рулёжка расхлябанная', () => {
+  expect(SMOOTH_RATE.cockpit).toBeGreaterThan(SMOOTH_RATE.chase)
+  expect(SMOOTH_RATE.bonnet).toBeGreaterThan(SMOOTH_RATE.tcam)
+})

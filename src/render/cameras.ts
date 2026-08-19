@@ -80,6 +80,9 @@ export function smoothTowards(from: Vec3, to: Vec3, dt: number, rate: number): V
 export const SMOOTH_RATE: Record<CameraMode, number> = {
   chase: 6,
   tcam: 9,
-  cockpit: 22,
-  bonnet: 22,
+  // 22 читалось как дёрганье: замер дал рывок камеры 0.17 м со скачками до
+  // 0.54 м против 0.03 м у chase — каждое колебание подвески шло прямо в
+  // кадр. 12 сохраняет отзывчивость рулёжки, но гасит вибрацию.
+  cockpit: 12,
+  bonnet: 12,
 }

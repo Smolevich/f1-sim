@@ -2,6 +2,7 @@ import { sanitizeName } from '../storage/local'
 import { DEFAULT_TRACK_ID, TRACK_CATALOGUE, isKnownTrackId } from '../track/catalogue'
 import { formatLapTime } from '../timing/format'
 import { DEFAULT_LIVERY, LIVERIES, liveryById } from './liveries'
+import { fetchTop } from '../net/leaderboard'
 
 export type StartChoice = { name: string; trackId: string; liveryId: string }
 
@@ -18,12 +19,21 @@ font:600 16px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;
 // margin:auto центрирует карточку, пока она помещается, и прижимает к верху,
 // когда нет: шесть трасс плюс восемь команд дают почти 1000 px, и на
 // ноутбучных 720 px кнопка «НА ТРАССУ» уезжала за нижний край.
+// Две колонки вместо одного длинного столбца: в один экран влезает всё, и
+// ничего не приходится листать. На узком экране колонки складываются.
 const CARD = `
-display:flex;flex-direction:column;gap:9px;
-padding:18px 26px;border:1px solid rgba(255,255,255,.18);
-border-radius:12px;background:rgba(0,0,0,.55);min-width:300px;
-margin:auto;
+display:grid;grid-template-columns:minmax(320px,1.15fr) minmax(240px,.85fr);
+gap:10px 22px;align-items:start;
+padding:20px 26px;border:1px solid rgba(255,255,255,.18);
+border-radius:14px;background:rgba(0,0,0,.62);
+margin:auto;max-width:min(94vw,900px);
 `
+
+const COLUMN = 'display:flex;flex-direction:column;gap:8px;min-width:0;'
+
+const TITLE_STYLE = 'grid-column:1/-1;font-size:19px;letter-spacing:.5px;'
+
+const FOOTER_STYLE = 'grid-column:1/-1;display:flex;flex-direction:column;gap:4px;'
 
 /** Строка трассы в списке: длина в километрах и реальный рекорд круга. */
 export function trackOptionLabel(id: string): string {
@@ -45,6 +55,7 @@ type Option = { id: string; label: string; colour?: number }
  */
 function optionList(
   options: readonly Option[], selected: string, testId: string,
+  onChange?: (id: string) => void,
 ): { element: HTMLElement; value: () => string } {
   const list = document.createElement('div')
   list.setAttribute('data-testid', testId)
@@ -85,13 +96,55 @@ function optionList(
       button.append(dot, document.createTextNode(option.label))
     }
     button.setAttribute('data-value', option.id)
-    button.addEventListener('click', () => { current = option.id; paint() })
+    button.addEventListener('click', () => {
+      current = option.id
+      paint()
+      onChange?.(option.id)
+    })
     buttons.set(option.id, button)
     list.appendChild(button)
   }
   paint()
 
   return { element: list, value: () => current }
+}
+
+/**
+ * Таблица рекордов выбранной трассы прямо в меню: до старта видно, что
+ * побивать, и есть куда посмотреть после заезда, не запуская новый.
+ */
+function leaderboardPanel(): { element: HTMLElement; load: (trackId: string) => void } {
+  const box = document.createElement('div')
+  box.setAttribute('data-testid', 'menu-leaderboard')
+  box.setAttribute(
+    'style',
+    'font-size:12px;line-height:1.7;padding:9px 12px;border-radius:8px;' +
+    'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);' +
+    'white-space:pre;min-height:76px;color:#dfe6ef;',
+  )
+
+  let token = 0
+  const load = (trackId: string): void => {
+    // Счётчик отсекает ответ на прошлую трассу: игрок успевает перещёлкнуть
+    // список, пока запрос в пути, и без него таблица показывает чужие круги.
+    token += 1
+    const mine = token
+    box.textContent = 'ТОП-5 · загрузка…'
+    void fetchTop(trackId).then((entries) => {
+      if (mine !== token) return
+      if (entries.length === 0) {
+        box.textContent = 'ТОП-5\nпока никого — время твоё'
+        return
+      }
+      const rows = entries.slice(0, 5).map((e, i) =>
+        `${i + 1}. ${e.name.padEnd(12)} ${formatLapTime(e.timeMs)}`)
+      box.textContent = ['ТОП-5', ...rows].join('\n')
+    }).catch(() => {
+      if (mine === token) box.textContent = 'ТОП-5\nтаблица недоступна'
+    })
+  }
+
+  return { element: box, load }
 }
 
 /** Оверлей старта: имя и трасса; резолвится, когда игрок подтвердил. */
@@ -109,18 +162,22 @@ export function askStart(
 
     const title = document.createElement('div')
     title.textContent = 'F1 SIM — КВАЛИФИКАЦИЯ'
-    title.style.fontSize = '20px'
+    title.setAttribute('style', TITLE_STYLE)
 
     const trackHint = document.createElement('div')
     trackHint.textContent = 'Трасса'
     trackHint.style.opacity = '.7'
     trackHint.style.fontSize = '13px'
 
+    const board = leaderboardPanel()
+    const startTrack = isKnownTrackId(existingTrack) ? existingTrack! : DEFAULT_TRACK_ID
     const trackList = optionList(
       TRACK_CATALOGUE.map((entry) => ({ id: entry.id, label: trackOptionLabel(entry.id) })),
-      isKnownTrackId(existingTrack) ? existingTrack! : DEFAULT_TRACK_ID,
+      startTrack,
       'track-select',
+      (id) => board.load(id),
     )
+    board.load(startTrack)
 
     const teamHint = document.createElement('div')
     teamHint.textContent = 'Команда'
@@ -180,10 +237,19 @@ export function askStart(
     credit.style.opacity = '.45'
     credit.style.fontSize = '11px'
 
-    card.append(
-      title, trackHint, trackList.element, teamHint, teamList.element,
-      hint, input, button, controls, credit,
-    )
+    const left = document.createElement('div')
+    left.setAttribute('style', COLUMN)
+    left.append(trackHint, trackList.element, board.element)
+
+    const right = document.createElement('div')
+    right.setAttribute('style', COLUMN)
+    right.append(teamHint, teamList.element, hint, input, button)
+
+    const footer = document.createElement('div')
+    footer.setAttribute('style', FOOTER_STYLE)
+    footer.append(controls, credit)
+
+    card.append(title, left, right, footer)
     overlay.appendChild(card)
     document.body.appendChild(overlay)
     input.focus()
