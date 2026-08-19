@@ -23,7 +23,7 @@ export function finishLines(bestMs: number | null): string[] {
     'ЗАЕЗД ЗАВЕРШЁН',
     result,
     `ПОТРАЧЕНО ПОПЫТОК: ${TOTAL_ATTEMPTS}/${TOTAL_ATTEMPTS}`,
-    'Enter — ещё три попытки · T — начать заново',
+    'Enter — ещё три попытки · T — начать заново · M — меню',
   ]
 }
 
@@ -61,7 +61,7 @@ export class PauseOverlay {
   }
 
   update(paused: boolean): void {
-    if (paused) this.overlay.show('ПАУЗА\nP — продолжить')
+    if (paused) this.overlay.show('ПАУЗА\nP — продолжить · M — меню')
     else this.overlay.hide()
   }
 }

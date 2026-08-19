@@ -131,6 +131,13 @@ async function main(): Promise<void> {
   }
 
   window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyM' && (session.finished || session.paused)) {
+      // Возврат в меню перезагрузкой: сцена, физика и трасса строятся один
+      // раз при старте, и разбирать их вручную рискованнее, чем начать с
+      // чистого листа — выбор игрока уже сохранён в localStorage.
+      window.location.reload()
+      return
+    }
     if (e.code === 'KeyT') {
       // Сброс по T тратит попытку: иначе три круга обходятся бесконечным
       // рестартом за метр до финиша. После финиша T начинает заезд заново,
