@@ -2,8 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { CarParts } from './car'
 import { buildWheel, FRONT_WHEEL, REAR_WHEEL } from './wheel-mesh'
-import { zoneFor } from './paint'
-import type { Zone } from './paint'
+import { buildPalette, paintVertices } from './livery-paint'
 
 const MODEL_URL = '/models/f1-car.glb'
 
@@ -97,32 +96,15 @@ export async function loadF1Model(colour: number, accent = 0xf2f4f7): Promise<Lo
   const wheels: THREE.Object3D[] = []
   const steered: THREE.Object3D[] = []
 
-  // Палитра по зонам: цвет команды только на кузове. Карбон, днище и
-  // антикрылья у настоящего болида тёмные, и заливка их цветом команды
-  // и делает машину похожей на игрушку из одного куска пластика.
+  // Один материал с окраской по вершинам: кузов модели — единый меш на всю
+  // машину, и материал на меш даёт либо целиком оранжевую, либо целиком
+  // чёрную машину. Цвет в вершинах позволяет носу быть в цвете команды,
+  // а борту рядом — карбоновым.
+  const palette = buildPalette(colour, accent)
   const bodyMaterial = new THREE.MeshStandardMaterial({
-    color: colour, metalness: 0.45, roughness: 0.3,
+    vertexColors: true, metalness: 0.45, roughness: 0.35,
   })
-  const carbon = new THREE.MeshStandardMaterial({
-    color: 0x1b1d22, metalness: 0.35, roughness: 0.55,
-  })
-  const floor = new THREE.MeshStandardMaterial({
-    color: 0x101216, metalness: 0.25, roughness: 0.7,
-  })
-  const wing = new THREE.MeshStandardMaterial({
-    color: 0x24262c, metalness: 0.4, roughness: 0.45,
-  })
-  const accentMaterial = new THREE.MeshStandardMaterial({
-    color: accent, metalness: 0.5, roughness: 0.3,
-  })
-  const palette: Record<Zone, THREE.MeshStandardMaterial> = {
-    body: bodyMaterial,
-    carbon,
-    floor,
-    wing,
-    accent: accentMaterial,
-  }
-  const bodyMaterials = [bodyMaterial, accentMaterial]
+  const bodyMaterials = [bodyMaterial]
 
   const size = new THREE.Vector3()
   const centre = new THREE.Vector3()
@@ -139,9 +121,8 @@ export async function loadF1Model(colour: number, accent = 0xf2f4f7): Promise<Lo
         return
       }
     }
-    mesh.material = palette[zoneFor({
-      x: centre.x, y: centre.y, z: centre.z, height: size.y,
-    })]
+    paintVertices(mesh.geometry, palette)
+    mesh.material = bodyMaterial
     mesh.castShadow = true
   })
 
