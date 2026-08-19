@@ -80,10 +80,15 @@ test('лесополоса прилегает к трассе, а не стои�
     return nearest
   })
 
-  // Ближний ряд стоит у полотна: без этого вдоль трассы остаётся голое поле.
-  expect(Math.min(...distances)).toBeLessThan(40)
-  // Но не на самой трассе — иначе деревья растут из асфальта.
-  expect(Math.min(...distances)).toBeGreaterThan(12)
+  // Ближний ряд виден с трассы, а не теряется на горизонте.
+  expect(Math.min(...distances)).toBeLessThan(60)
+
+  // Деревья стоят за отбойниками (9 м от края полотна) с запасом на крону:
+  // вылетевший болид должен попадать в зону вылета, а не в лес.
+  const halfWidth = track.widthM / 2
+  const barrier = halfWidth + 9
+  const crownReach = 7
+  expect(Math.min(...distances)).toBeGreaterThan(barrier + crownReach)
 })
 
 test('лесополоса идёт по обе стороны трассы', () => {

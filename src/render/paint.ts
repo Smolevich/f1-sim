@@ -39,14 +39,14 @@ const FRONT_WING_Z = 1.62
 /** Заднее антикрыло и диффузор. */
 const REAR_WING_Z = -1.72
 
-/** Полоса по осевой: у Лего оранжевая лента идёт от носа через кокпит. */
-const SPINE_HALF_WIDTH = 0.22
-
 /** Законцовки антикрыльев: крайние по ширине пластины несут цвет команды. */
 const ENDPLATE_OFFSET = 0.55
 
-/** Полосой может быть только узкая деталь, а не кузов во всю ширину. */
-const SPINE_MAX_WIDTH = 0.5
+/** Тёмная вставка начинается на этом отступе от осевой. */
+const FLANK_INSET = 0.34
+
+/** Вставка идёт по низу борта, выше — цвет команды. */
+const FLANK_TOP_Y = 0.45
 
 export function zoneFor(part: Placement): Zone {
   const offAxis = Math.abs(part.x - AXIS_X)
@@ -56,19 +56,18 @@ export function zoneFor(part: Placement): Zone {
     return offAxis > ENDPLATE_OFFSET ? 'livery' : 'wing'
   }
 
+  // Днище и halo — карбон: это единственные зоны, которые на настоящем
+  // болиде действительно тёмные почти у всех команд.
   if (part.y < FLOOR_Y) return 'floor'
   if (part.y > CANOPY_Y) return 'carbon'
 
-  // Нос целиком в цвете команды — самое заметное пятно спереди.
-  if (part.z > NOSE_Z) return 'livery'
+  // Тёмная вставка на борту понтона — та самая «щека» с фото Лего. Узкая
+  // полоса, а не весь борт: цвет команды обязан оставаться основным, иначе
+  // Mercedes от Ferrari не отличить.
+  if (offAxis > FLANK_INSET && part.y < FLANK_TOP_Y && part.z < NOSE_Z) {
+    return 'carbon'
+  }
 
-  // Полоса по осевой от носа до кокпита. Габарит обязателен: меш кузова
-  // тянется через всю машину (1.78 м в ширину), центр у него тоже на осевой,
-  // и без проверки ширины он забирал полосу — оранжевым заливало борта.
-  if (offAxis < SPINE_HALF_WIDTH && part.width < SPINE_MAX_WIDTH) return 'livery'
-
-  // Узкие накладки по борту — акцентный цвет.
-  if (part.height < 0.16) return 'accent'
-
-  return 'carbon'
+  // Всё остальное — цвет команды: нос, монокок, верх понтонов.
+  return 'livery'
 }
