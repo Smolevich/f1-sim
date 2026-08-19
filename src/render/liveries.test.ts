@@ -7,7 +7,14 @@ test('идентификаторы ливрей уникальны', () => {
 })
 
 test('ливрея находится по идентификатору', () => {
-  expect(liveryById('papaya').name).toContain('Папайя')
+  expect(liveryById('mclaren').name).toBe('McLaren')
+})
+
+test('в списке настоящие команды чемпионата', () => {
+  const names = LIVERIES.map((l) => l.name)
+  for (const team of ['Mercedes', 'Ferrari', 'Red Bull', 'McLaren']) {
+    expect(names).toContain(team)
+  }
 })
 
 test('неизвестный идентификатор даёт ливрею по умолчанию, а не падение', () => {

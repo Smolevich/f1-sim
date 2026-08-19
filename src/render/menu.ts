@@ -26,7 +26,7 @@ export function trackOptionLabel(id: string): string {
 }
 
 
-type Option = { id: string; label: string }
+type Option = { id: string; label: string; colour?: number }
 
 /**
  * Список выбора кнопками, а не <select>.
@@ -63,7 +63,20 @@ function optionList(
   for (const option of options) {
     const button = document.createElement('button')
     button.type = 'button'
-    button.textContent = option.label
+    if (option.colour === undefined) {
+      button.textContent = option.label
+    } else {
+      // Кружок цвета команды: по названию не угадать, в чём поедешь.
+      const dot = document.createElement('span')
+      dot.setAttribute(
+        'style',
+        'display:inline-block;width:11px;height:11px;border-radius:50%;' +
+        'margin-right:9px;vertical-align:-1px;' +
+        `background:#${option.colour.toString(16).padStart(6, '0')};` +
+        'border:1px solid rgba(0,0,0,.35);',
+      )
+      button.append(dot, document.createTextNode(option.label))
+    }
     button.setAttribute('data-value', option.id)
     button.addEventListener('click', () => { current = option.id; paint() })
     buttons.set(option.id, button)
@@ -108,7 +121,7 @@ export function askStart(
     teamHint.style.fontSize = '13px'
 
     const teamList = optionList(
-      LIVERIES.map((livery) => ({ id: livery.id, label: livery.name })),
+      LIVERIES.map((livery) => ({ id: livery.id, label: livery.name, colour: livery.primary })),
       liveryById(existingLivery ?? DEFAULT_LIVERY.id).id,
       'team-select',
     )
