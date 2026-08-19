@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest'
-import { CAMERA_ORDER, cameraPose, nextMode, SMOOTH_RATE, smoothTowards } from './cameras'
+import {
+  CAMERA_ORDER, cameraPose, compensateLag, lagDistance, nextMode, SMOOTH_RATE, smoothTowards,
+} from './cameras'
 
 const at = { x: 0, y: 0, z: 0 }
 
@@ -68,4 +70,52 @@ test('ближние камеры сглажены достаточно, что�
 test('ближние камеры всё же жёстче внешних — иначе рулёжка расхлябанная', () => {
   expect(SMOOTH_RATE.cockpit).toBeGreaterThan(SMOOTH_RATE.chase)
   expect(SMOOTH_RATE.bonnet).toBeGreaterThan(SMOOTH_RATE.tcam)
+})
+
+test('отставание сглаживателя растёт со скоростью', () => {
+  const slow = lagDistance(20, 1 / 60, 6)
+  const fast = lagDistance(65, 1 / 60, 6)
+  expect(fast).toBeGreaterThan(slow)
+})
+
+test('жёсткое сглаживание отстаёт меньше мягкого', () => {
+  expect(lagDistance(65, 1 / 60, 20)).toBeLessThan(lagDistance(65, 1 / 60, 6))
+})
+
+test('на месте отставания нет', () => {
+  expect(lagDistance(0, 1 / 60, 6)).toBe(0)
+})
+
+test('нулевая ставка не даёт деления на ноль', () => {
+  expect(lagDistance(65, 1 / 60, 0)).toBe(0)
+  expect(Number.isFinite(lagDistance(65, 0, 6))).toBe(true)
+})
+
+test('компенсация сдвигает цель по направлению движения', () => {
+  // Курс 0 — движение вдоль +Z, значит цель уезжает вперёд по Z.
+  const moved = compensateLag({ x: 0, y: 1, z: 0 }, 0, 65, 1 / 60, 6)
+  expect(moved.z).toBeGreaterThan(5)
+  expect(moved.x).toBeCloseTo(0, 6)
+  expect(moved.y).toBe(1)
+})
+
+test('компенсация держит дистанцию камеры почти постоянной', () => {
+  // Симуляция: цель едет равномерно, камера сглаживает компенсированную цель.
+  const dt = 1 / 60
+  const rate = 6
+  const v = 65
+  let cam = { x: 0, y: 0, z: 0 }
+  let carZ = 0
+  const gaps: number[] = []
+  for (let i = 0; i < 300; i += 1) {
+    carZ += v * dt
+    const rig = { x: 0, y: 0, z: carZ - 17 }
+    const aim = compensateLag(rig, 0, v, dt, rate)
+    cam = smoothTowards(cam, aim, dt, rate)
+    if (i > 200) gaps.push(carZ - cam.z)
+  }
+  const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length
+  // Без компенсации разрыв был бы ~27 м вместо 17.
+  expect(mean).toBeGreaterThan(15)
+  expect(mean).toBeLessThan(19)
 })

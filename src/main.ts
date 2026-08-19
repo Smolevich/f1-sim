@@ -5,6 +5,9 @@ import { submitLap } from './net/leaderboard'
 import { Vehicle } from './physics/vehicle'
 import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
 import { blendFactor, lerpPosition, slerpOrientation } from './render/interpolate'
+import {
+  LEVEL, lateralG, longitudinalG, settle, targetAttitude,
+} from './render/body-attitude'
 import { buildBrakingMarkers, buildRacingLine } from './render/braking'
 import { ControlsHint } from './render/controls-hint'
 import { spinWheels } from './render/car'
@@ -13,7 +16,8 @@ import { loadF1Model } from './render/f1-model'
 import { liveryById } from './render/liveries'
 import { buildGrandstands, buildHills, buildTrees } from './render/scenery'
 import {
-  cameraPose, nextMode, SMOOTH_RATE, smoothTowards, type CameraMode, type Vec3,
+  cameraPose, compensateLag, nextMode, SMOOTH_RATE, smoothTowards,
+  type CameraMode, type Vec3,
 } from './render/cameras'
 import { buildGhostCar } from './render/ghost-car'
 import { Hud } from './render/hud'
@@ -113,6 +117,14 @@ async function main(): Promise<void> {
   const probe = (window as unknown as {
     __probe?: (t: unknown, c: unknown) => void
   }).__probe ?? null
+  const probe2 = (window as unknown as {
+    __probe2?: (q: unknown, v: number, st: number) => void
+  }).__probe2 ?? null
+
+  // Визуальный наклон кузова: физика идёт по рельсам (размах тангажа 0.52°),
+  // и без клевков на торможении болид выглядит парящим над дорогой.
+  let attitude = LEVEL
+  let previousSpeedMs = 0
 
   let cameraEye: Vec3 | null = null
   let cameraLook: Vec3 | null = null
@@ -248,8 +260,22 @@ async function main(): Promise<void> {
     const shownRot = slerpOrientation(before.orientation, orientation, blend)
 
     if (probe !== null) probe({ ...telemetry, position: shown }, camera.position)
+
     carMesh.position.set(shown.x, shown.y, shown.z)
     carMesh.quaternion.set(shownRot.x, shownRot.y, shownRot.z, shownRot.w)
+
+    const longG = longitudinalG(telemetry.speedMs, previousSpeedMs, frameSeconds)
+    previousSpeedMs = telemetry.speedMs
+    attitude = settle(
+      attitude,
+      targetAttitude(longG, lateralG(telemetry.speedMs, lastSteer, 3.6)),
+      frameSeconds,
+    )
+    // Наклон домножается на курсовой кватернион, поэтому крен идёт вокруг
+    // продольной оси машины, а не мировой.
+    carMesh.rotateX(attitude.pitch)
+    carMesh.rotateZ(attitude.roll)
+    if (probe2 !== null) probe2(carMesh.quaternion, telemetry.speedMs, lastSteer)
     spinWheels(carParts, telemetry.speedMs, lastSteer, frameSeconds)
 
     const lapMs = sessionMs - (lap.startedAtMs ?? sessionMs)
@@ -272,10 +298,18 @@ async function main(): Promise<void> {
     const rate = SMOOTH_RATE[cameraMode]
     // На первом кадре и после смены режима догонять нечего: камера ставится
     // сразу, иначе она приезжает издалека через полсекунды.
-    cameraEye = cameraEye === null ? pose.eye : smoothTowards(cameraEye, pose.eye, frameSeconds, rate)
+    // Цель сдвигается вперёд на величину отставания сглаживателя: иначе на
+    // 235 км/ч камера висит в 25 м вместо 18, и дистанция гуляет на 6 м при
+    // каждом разгоне и торможении.
+    const aimEye = compensateLag(pose.eye, heading, telemetry.speedMs, frameSeconds, rate)
+    cameraEye = cameraEye === null ? aimEye : smoothTowards(cameraEye, aimEye, frameSeconds, rate)
     cameraLook = cameraLook === null
       ? pose.look
-      : smoothTowards(cameraLook, pose.look, frameSeconds, rate)
+      : smoothTowards(
+        cameraLook,
+        compensateLag(pose.look, heading, telemetry.speedMs, frameSeconds, rate),
+        frameSeconds, rate,
+      )
     camera.position.set(cameraEye.x, cameraEye.y, cameraEye.z)
     camera.lookAt(cameraLook.x, cameraLook.y, cameraLook.z)
     if (Math.abs(camera.fov - pose.fov) > 0.1) {
