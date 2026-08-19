@@ -5,17 +5,24 @@ import { DEFAULT_LIVERY, LIVERIES, liveryById } from './liveries'
 
 export type StartChoice = { name: string; trackId: string; liveryId: string }
 
+// Прокрутка на оверлее, а не на карточке: при align-items:center высокая
+// карточка обрезается с обоих краёв, и до кнопки старта не добраться.
 const OVERLAY = `
 position:fixed;inset:0;z-index:20;display:flex;
-align-items:center;justify-content:center;
+align-items:flex-start;justify-content:center;overflow-y:auto;
+padding:24px 16px;box-sizing:border-box;
 background:rgba(8,12,20,.86);backdrop-filter:blur(4px);
 font:600 16px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;
 `
 
+// margin:auto центрирует карточку, пока она помещается, и прижимает к верху,
+// когда нет: шесть трасс плюс восемь команд дают почти 1000 px, и на
+// ноутбучных 720 px кнопка «НА ТРАССУ» уезжала за нижний край.
 const CARD = `
-display:flex;flex-direction:column;gap:14px;
-padding:28px 32px;border:1px solid rgba(255,255,255,.18);
+display:flex;flex-direction:column;gap:9px;
+padding:18px 26px;border:1px solid rgba(255,255,255,.18);
 border-radius:12px;background:rgba(0,0,0,.55);min-width:300px;
+margin:auto;
 `
 
 /** Строка трассы в списке: длина в километрах и реальный рекорд круга. */
@@ -41,7 +48,7 @@ function optionList(
 ): { element: HTMLElement; value: () => string } {
   const list = document.createElement('div')
   list.setAttribute('data-testid', testId)
-  list.setAttribute('style', 'display:flex;flex-direction:column;gap:4px;')
+  list.setAttribute('style', 'display:flex;flex-direction:column;gap:3px;')
 
   let current = selected
   const buttons = new Map<string, HTMLButtonElement>()
@@ -51,7 +58,7 @@ function optionList(
       const active = id === current
       button.setAttribute(
         'style',
-        'padding:8px 11px;font:inherit;font-size:13px;text-align:left;cursor:pointer;' +
+        'padding:5px 10px;font:inherit;font-size:12px;text-align:left;cursor:pointer;' +
         'border-radius:7px;transition:background .12s;' +
         (active
           ? 'color:#04121f;background:#4ec9ff;border:1px solid #4ec9ff;'
