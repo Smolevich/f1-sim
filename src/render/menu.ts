@@ -3,6 +3,7 @@ import { DEFAULT_TRACK_ID, TRACK_CATALOGUE, isKnownTrackId } from '../track/cata
 import { formatLapTime } from '../timing/format'
 import { DEFAULT_LIVERY, LIVERIES, liveryById } from './liveries'
 import { fetchTop } from '../net/leaderboard'
+import { buildBoard } from './board-view'
 
 export type StartChoice = { name: string; trackId: string; liveryId: string }
 
@@ -113,14 +114,23 @@ function optionList(
  * Таблица рекордов выбранной трассы прямо в меню: до старта видно, что
  * побивать, и есть куда посмотреть после заезда, не запуская новый.
  */
-function leaderboardPanel(): { element: HTMLElement; load: (trackId: string) => void } {
+function leaderboardPanel(playerName: string): {
+  element: HTMLElement; load: (trackId: string) => void
+} {
   const box = document.createElement('div')
   box.setAttribute('data-testid', 'menu-leaderboard')
   box.setAttribute(
     'style',
-    'font-size:12px;line-height:1.7;padding:9px 12px;border-radius:8px;' +
-    'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);' +
-    'white-space:pre;min-height:76px;color:#dfe6ef;',
+    'padding:10px 12px;border-radius:9px;' +
+    'background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.12);' +
+    'min-height:96px;',
+  )
+
+  const caption = document.createElement('div')
+  caption.textContent = 'ЛУЧШИЕ КРУГИ'
+  caption.setAttribute(
+    'style',
+    'font-size:11px;letter-spacing:1.2px;color:#8ea0b4;margin-bottom:7px;',
   )
 
   let token = 0
@@ -129,18 +139,25 @@ function leaderboardPanel(): { element: HTMLElement; load: (trackId: string) => 
     // список, пока запрос в пути, и без него таблица показывает чужие круги.
     token += 1
     const mine = token
-    box.textContent = 'ТОП-5 · загрузка…'
+
+    const show = (body: HTMLElement): void => {
+      box.replaceChildren(caption, body)
+    }
+
+    const loading = document.createElement('div')
+    loading.textContent = 'загрузка…'
+    loading.setAttribute('style', 'font-size:12px;color:#8ea0b4;padding:4px 2px;')
+    show(loading)
+
     void fetchTop(trackId).then((entries) => {
       if (mine !== token) return
-      if (entries.length === 0) {
-        box.textContent = 'ТОП-5\nпока никого — время твоё'
-        return
-      }
-      const rows = entries.slice(0, 5).map((e, i) =>
-        `${i + 1}. ${e.name.padEnd(12)} ${formatLapTime(e.timeMs)}`)
-      box.textContent = ['ТОП-5', ...rows].join('\n')
+      show(buildBoard(entries.slice(0, 5), playerName, true))
     }).catch(() => {
-      if (mine === token) box.textContent = 'ТОП-5\nтаблица недоступна'
+      if (mine !== token) return
+      const failed = document.createElement('div')
+      failed.textContent = 'таблица недоступна'
+      failed.setAttribute('style', 'font-size:12px;color:#8ea0b4;padding:4px 2px;')
+      show(failed)
     })
   }
 
@@ -169,7 +186,7 @@ export function askStart(
     trackHint.style.opacity = '.7'
     trackHint.style.fontSize = '13px'
 
-    const board = leaderboardPanel()
+    const board = leaderboardPanel(existing ?? '')
     const startTrack = isKnownTrackId(existingTrack) ? existingTrack! : DEFAULT_TRACK_ID
     const trackList = optionList(
       TRACK_CATALOGUE.map((entry) => ({ id: entry.id, label: trackOptionLabel(entry.id) })),
