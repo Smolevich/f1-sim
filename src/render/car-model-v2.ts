@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import {
-  buildAirbox, buildCockpitRim, buildEndplate, buildFloor, buildHalo,
-  buildNosePylons, buildRearWing, buildShell, buildSidepod, buildWing,
+  buildAirbox, buildBargeboards, buildCockpitRim, buildDiffuser, buildEndplate,
+  buildFloor, buildHalo, buildMirrors, buildNosePylons, buildRearWing,
+  buildShell, buildSidepod, buildTailDetails, buildWheelCovers, buildWing,
 } from './car-build'
 import { FRONT_WING, FRONT_AXLE_Z, HALF_TRACK_M, REAR_AXLE_Z, WHEEL_RADIUS_M } from './car-shape'
 import { buildWheel, FRONT_WHEEL, REAR_WHEEL } from './wheel-mesh'
@@ -56,6 +57,13 @@ export function buildCarV2(livery: number, accent: number): CarParts {
   }
 
   for (const g of buildNosePylons()) add(g, carbon)
+  for (const g of buildBargeboards()) add(g, carbon)
+  for (const g of buildMirrors()) add(g, carbon)
+  for (const g of buildTailDetails()) add(g, carbon)
+  add(buildDiffuser(), dark)
+  for (const g of buildWheelCovers(FRONT_AXLE_Z, REAR_AXLE_Z, HALF_TRACK_M, WHEEL_RADIUS_M)) {
+    add(g, body)
+  }
   for (const g of buildHalo()) add(g, carbon)
   for (const [i, g] of buildRearWing().entries()) add(g, i >= 2 ? trim : carbon)
 

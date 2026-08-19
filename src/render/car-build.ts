@@ -208,3 +208,73 @@ export function buildRearWing(): THREE.BufferGeometry[] {
 
   return [main, flap, ...plates]
 }
+
+/**
+ * Диффузор: восходящий козырёк под кормой. У болида 2022 года он крупный,
+ * и без него корма выглядит обрубленной.
+ */
+export function buildDiffuser(): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(0.86, 0.20, 0.62)
+  g.rotateX(0.30)
+  g.translate(0, 0.17, -2.05)
+  return g
+}
+
+/** Дефлекторы по бортам перед понтонами — их хорошо видно на фото сбоку. */
+export function buildBargeboards(): THREE.BufferGeometry[] {
+  return ([-1, 1] as const).flatMap((side) =>
+    [0, 1, 2].map((i) => {
+      const fin = new THREE.BoxGeometry(0.02, 0.16 - i * 0.03, 0.34)
+      fin.rotateY(side * 0.22)
+      fin.translate(side * (0.50 + i * 0.07), 0.20 + i * 0.05, 1.00 - i * 0.16)
+      return fin
+    }))
+}
+
+/** Зеркала на стойках по бортам кокпита. */
+export function buildMirrors(): THREE.BufferGeometry[] {
+  return ([-1, 1] as const).flatMap((side) => {
+    const stalk = new THREE.BoxGeometry(0.16, 0.022, 0.03)
+    stalk.translate(side * 0.40, 0.60, 0.62)
+    const glass = new THREE.BoxGeometry(0.045, 0.075, 0.10)
+    glass.translate(side * 0.49, 0.62, 0.62)
+    return [stalk, glass]
+  })
+}
+
+/**
+ * Обтекатели колёс: дуги над покрышками, введённые регламентом 2022 года.
+ * Именно они дают узнаваемый силуэт спереди на фотографии.
+ */
+export function buildWheelCovers(
+  frontZ: number, rearZ: number, halfTrack: number, radius: number,
+): THREE.BufferGeometry[] {
+  const parts: THREE.BufferGeometry[] = []
+  for (const [z, width] of [[frontZ, 0.34], [rearZ, 0.44]] as const) {
+    for (const side of [-1, 1] as const) {
+      const arc = new THREE.TorusGeometry(radius * 1.06, 0.028, 6, 14, Math.PI * 0.62)
+      arc.rotateY(Math.PI / 2)
+      arc.rotateZ(Math.PI * 0.19)
+      arc.translate(side * halfTrack, radius, z)
+      parts.push(arc)
+
+      const fin = new THREE.BoxGeometry(width, 0.03, 0.20)
+      fin.translate(side * halfTrack, radius * 1.92, z - 0.06)
+      parts.push(fin)
+    }
+  }
+  return parts
+}
+
+/** Выхлоп и балка заднего крыла. */
+export function buildTailDetails(): THREE.BufferGeometry[] {
+  const pipe = new THREE.CylinderGeometry(0.045, 0.055, 0.22, 10)
+  pipe.rotateX(Math.PI / 2)
+  pipe.translate(0, 0.52, -2.42)
+
+  const beam = new THREE.BoxGeometry(0.72, 0.03, 0.16)
+  beam.rotateX(-0.18)
+  beam.translate(0, 0.44, -2.30)
+
+  return [pipe, beam]
+}
