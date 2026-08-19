@@ -11,7 +11,8 @@ import {
 import { buildBrakingMarkers, buildRacingLine } from './render/braking'
 import { ControlsHint } from './render/controls-hint'
 import { spinWheels } from './render/car'
-import { buildCarV2 } from './render/car-model-v2'
+import { buildF1Car } from './render/f1-car'
+import { loadF1Model } from './render/f1-model'
 import { liveryById } from './render/liveries'
 import { buildGrandstands, buildHills, buildTrees } from './render/scenery'
 import {
@@ -73,9 +74,13 @@ async function main(): Promise<void> {
   scene.add(buildTrees(track))
   scene.add(buildHills(track))
 
-  // Собственная модель: строится кодом по фотографиям, ничего не грузится
-  // из сети — значит и падать нечему.
-  const carParts = buildCarV2(livery.primary, livery.accent)
+  // Готовая модель: 49 тыс. треугольников против 3.5 тыс. у собственной —
+  // на своей поверхности выходят гранёными, а кромки острыми. Если glb не
+  // отдался, остаётся процедурная машина: пустая сцена ломает игру.
+  const carParts = await loadF1Model(livery.primary, livery.accent).catch((err: unknown) => {
+    console.warn('модель болида не загрузилась, беру процедурную', err)
+    return buildF1Car(livery.primary)
+  })
   const carMesh = carParts.group
   scene.add(carMesh)
   // Призрак — копия того меша, что реально доехал до сцены, чтобы силуэты совпадали.
