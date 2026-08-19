@@ -25,6 +25,55 @@ export function trackOptionLabel(id: string): string {
   return `${t.name} · ${(t.lengthM / 1000).toFixed(3)} км · ${formatLapTime(t.recordMs)} ${t.recordDriver}`
 }
 
+
+type Option = { id: string; label: string }
+
+/**
+ * Список выбора кнопками, а не <select>.
+ *
+ * Нативный список на macOS открывается системным окном: стрелки в него не
+ * доходят, и выбор клавиатурой не работал — игрок жал вниз, значение не
+ * менялось, и стартовала прежняя трасса. Кнопки ведут себя одинаково всюду
+ * и показывают все варианты сразу, без раскрытия.
+ */
+function optionList(
+  options: readonly Option[], selected: string, testId: string,
+): { element: HTMLElement; value: () => string } {
+  const list = document.createElement('div')
+  list.setAttribute('data-testid', testId)
+  list.setAttribute('style', 'display:flex;flex-direction:column;gap:4px;')
+
+  let current = selected
+  const buttons = new Map<string, HTMLButtonElement>()
+
+  const paint = (): void => {
+    for (const [id, button] of buttons) {
+      const active = id === current
+      button.setAttribute(
+        'style',
+        'padding:8px 11px;font:inherit;font-size:13px;text-align:left;cursor:pointer;' +
+        'border-radius:7px;transition:background .12s;' +
+        (active
+          ? 'color:#04121f;background:#4ec9ff;border:1px solid #4ec9ff;'
+          : 'color:#fff;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);'),
+      )
+    }
+  }
+
+  for (const option of options) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = option.label
+    button.setAttribute('data-value', option.id)
+    button.addEventListener('click', () => { current = option.id; paint() })
+    buttons.set(option.id, button)
+    list.appendChild(button)
+  }
+  paint()
+
+  return { element: list, value: () => current }
+}
+
 /** Оверлей старта: имя и трасса; резолвится, когда игрок подтвердил. */
 export function askStart(
   existing: string | null,
@@ -47,41 +96,22 @@ export function askStart(
     trackHint.style.opacity = '.7'
     trackHint.style.fontSize = '13px'
 
-    const select = document.createElement('select')
-    select.setAttribute('data-testid', 'track-select')
-    select.setAttribute(
-      'style',
-      'padding:10px 12px;font:inherit;color:#fff;background:rgba(255,255,255,.08);' +
-      'border:1px solid rgba(255,255,255,.25);border-radius:8px;outline:none;',
+    const trackList = optionList(
+      TRACK_CATALOGUE.map((entry) => ({ id: entry.id, label: trackOptionLabel(entry.id) })),
+      isKnownTrackId(existingTrack) ? existingTrack! : DEFAULT_TRACK_ID,
+      'track-select',
     )
-    for (const entry of TRACK_CATALOGUE) {
-      const option = document.createElement('option')
-      option.value = entry.id
-      option.textContent = trackOptionLabel(entry.id)
-      option.style.color = '#04121f'
-      select.appendChild(option)
-    }
-    select.value = isKnownTrackId(existingTrack) ? existingTrack! : DEFAULT_TRACK_ID
 
     const teamHint = document.createElement('div')
     teamHint.textContent = 'Команда'
     teamHint.style.opacity = '.7'
     teamHint.style.fontSize = '13px'
 
-    const teamSelect = document.createElement('select')
-    teamSelect.setAttribute('data-testid', 'team-select')
-    teamSelect.setAttribute(
-      'style',
-      'padding:10px 12px;font:inherit;color:#fff;background:rgba(255,255,255,.08);' +
-      'border:1px solid rgba(255,255,255,.25);border-radius:8px;outline:none;',
+    const teamList = optionList(
+      LIVERIES.map((livery) => ({ id: livery.id, label: livery.name })),
+      liveryById(existingLivery ?? DEFAULT_LIVERY.id).id,
+      'team-select',
     )
-    for (const livery of LIVERIES) {
-      const option = document.createElement('option')
-      option.value = livery.id
-      option.textContent = livery.name
-      teamSelect.appendChild(option)
-    }
-    teamSelect.value = liveryById(existingLivery ?? DEFAULT_LIVERY.id).id
 
     const hint = document.createElement('div')
     hint.textContent = 'Имя для таблицы рекордов'
@@ -113,8 +143,8 @@ export function askStart(
 
     const submit = (): void => {
       const name = sanitizeName(input.value)
-      const trackId = isKnownTrackId(select.value) ? select.value : DEFAULT_TRACK_ID
-      const liveryId = liveryById(teamSelect.value).id
+      const trackId = isKnownTrackId(trackList.value()) ? trackList.value() : DEFAULT_TRACK_ID
+      const liveryId = liveryById(teamList.value()).id
       overlay.remove()
       resolve({ name, trackId, liveryId })
     }
@@ -131,7 +161,7 @@ export function askStart(
     credit.style.fontSize = '11px'
 
     card.append(
-      title, trackHint, select, teamHint, teamSelect,
+      title, trackHint, trackList.element, teamHint, teamList.element,
       hint, input, button, controls, credit,
     )
     overlay.appendChild(card)
