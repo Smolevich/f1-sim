@@ -71,7 +71,7 @@ async function main(): Promise<void> {
 
   // Реальная модель болида; если glb не отдался, остаётся процедурная машина —
   // играть можно и без неё, а пустая сцена вместо болида игру ломает.
-  const carParts = await loadF1Model(livery.primary).catch((err: unknown) => {
+  const carParts = await loadF1Model(livery.primary, livery.accent).catch((err: unknown) => {
     console.warn('модель болида не загрузилась, беру процедурную', err)
     return buildF1Car(livery.primary)
   })

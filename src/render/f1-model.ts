@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { CarParts } from './car'
 import { buildWheel, FRONT_WHEEL, REAR_WHEEL } from './wheel-mesh'
+import { zoneFor } from './paint'
+import type { Zone } from './paint'
 
 const MODEL_URL = '/models/f1-car.glb'
 
@@ -86,7 +88,7 @@ export type LoadedCar = CarParts & { bodyMaterials: THREE.MeshStandardMaterial[]
  * Кузов идёт из модели как есть: резать его не нужно и вредно — колёс в этой
  * геометрии нет, а попытка вырезать их цилиндрами уносила куски бортов.
  */
-export async function loadF1Model(colour: number): Promise<LoadedCar> {
+export async function loadF1Model(colour: number, accent = 0xf2f4f7): Promise<LoadedCar> {
   const gltf = await new GLTFLoader().loadAsync(MODEL_URL)
   const source = gltf.scene
   source.updateMatrixWorld(true)
@@ -95,10 +97,32 @@ export async function loadF1Model(colour: number): Promise<LoadedCar> {
   const wheels: THREE.Object3D[] = []
   const steered: THREE.Object3D[] = []
 
+  // Палитра по зонам: цвет команды только на кузове. Карбон, днище и
+  // антикрылья у настоящего болида тёмные, и заливка их цветом команды
+  // и делает машину похожей на игрушку из одного куска пластика.
   const bodyMaterial = new THREE.MeshStandardMaterial({
-    color: colour, metalness: 0.5, roughness: 0.35,
+    color: colour, metalness: 0.45, roughness: 0.3,
   })
-  const bodyMaterials = [bodyMaterial]
+  const carbon = new THREE.MeshStandardMaterial({
+    color: 0x1b1d22, metalness: 0.35, roughness: 0.55,
+  })
+  const floor = new THREE.MeshStandardMaterial({
+    color: 0x101216, metalness: 0.25, roughness: 0.7,
+  })
+  const wing = new THREE.MeshStandardMaterial({
+    color: 0x24262c, metalness: 0.4, roughness: 0.45,
+  })
+  const accentMaterial = new THREE.MeshStandardMaterial({
+    color: accent, metalness: 0.5, roughness: 0.3,
+  })
+  const palette: Record<Zone, THREE.MeshStandardMaterial> = {
+    body: bodyMaterial,
+    carbon,
+    floor,
+    wing,
+    accent: accentMaterial,
+  }
+  const bodyMaterials = [bodyMaterial, accentMaterial]
 
   const size = new THREE.Vector3()
   const centre = new THREE.Vector3()
@@ -115,7 +139,9 @@ export async function loadF1Model(colour: number): Promise<LoadedCar> {
         return
       }
     }
-    mesh.material = bodyMaterial
+    mesh.material = palette[zoneFor({
+      x: centre.x, y: centre.y, z: centre.z, height: size.y,
+    })]
     mesh.castShadow = true
   })
 
@@ -127,6 +153,10 @@ export async function loadF1Model(colour: number): Promise<LoadedCar> {
   group.add(bodyScaled)
 
   for (const corner of CORNERS) {
+    // Два узла на колесо: ступица поворачивается рулём (Y), вложенное колесо
+    // вращается качением (X). На одном узле углы Эйлера перемножаются, и
+    // колесо начинает ходить восьмёркой — ось качения уводит от горизонта
+    // на 17° при вывернутом руле.
     const hub = new THREE.Group()
     hub.position.set(
       corner.x * RENDER_HALF_TRACK_M,
@@ -137,7 +167,7 @@ export async function loadF1Model(colour: number): Promise<LoadedCar> {
     wheel.traverse((n) => { n.castShadow = true })
     hub.add(wheel)
     group.add(hub)
-    wheels.push(hub)
+    wheels.push(wheel)
     if (corner.steered) steered.push(hub)
   }
 
