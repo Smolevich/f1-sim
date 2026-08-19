@@ -6,6 +6,19 @@ const GRANDSTAND_OFFSET_M = 48
 const TREE_EXCLUSION_M = 60
 
 /**
+ * Лесополоса вдоль полотна.
+ *
+ * Случайный разброс по площади с отступом 60 м оставляет вдоль трассы голое
+ * поле: деревья видны только далеко на горизонте, и трасса читается как
+ * полоса асфальта в чистом поле. У реальных автодромов — Монцы в парке,
+ * Спа в Арденнах — лес подходит к отбойникам почти вплотную.
+ */
+const BELT_INNER_M = 24
+const BELT_DEPTH_M = 70
+const BELT_STEP_M = 7
+const BELT_ROWS = 6
+
+/**
  * Детерминированный шум: картинка обязана быть одинаковой между запусками,
  * иначе призрак прошлого круга едет по другому пейзажу, а скриншоты не
  * сравниваются между сборками.
@@ -56,6 +69,66 @@ export function grandstandSlots(track: Track): { position: TrackPoint; headingRa
 }
 
 /** Деревья по округе, но не ближе TREE_EXCLUSION_M к полотну. */
+/**
+ * Деревья вдоль трассы: идём по осевой и ставим ряды по обе стороны.
+ * Глубина и шаг рваные, иначе получается аллея по линейке.
+ */
+export function beltSlots(track: Track): TrackPoint[] {
+  const cl = track.centerline
+  const slots: TrackPoint[] = []
+  const stride = Math.max(1, Math.round(BELT_STEP_M / spacingOf(track)))
+
+  for (let i = 0; i < cl.length; i += stride) {
+    const here = cl[i]
+    const next = cl[(i + 1) % cl.length]
+    const heading = Math.atan2(next.x - here.x, next.z - here.z)
+    // Нормаль к направлению движения.
+    const nx = Math.cos(heading)
+    const nz = -Math.sin(heading)
+
+    for (const side of [-1, 1]) {
+      const rows = BELT_ROWS
+      for (let r = 0; r < rows; r += 1) {
+        const jitter = hashRandom(i * 31 + r * 7 + (side > 0 ? 101 : 0))
+        const depth = BELT_INNER_M + (r / rows) * BELT_DEPTH_M + jitter * 14
+        const along = (hashRandom(i * 17 + r * 3 + (side > 0 ? 53 : 0)) - 0.5) * BELT_STEP_M
+        const slot = {
+          x: here.x + nx * depth * side + Math.sin(heading) * along,
+          y: 0,
+          z: here.z + nz * depth * side + Math.cos(heading) * along,
+        }
+        // Отступ считается от своего участка, а на повороте соседний виток
+        // проходит ближе — без проверки по всей осевой дерево вырастает на
+        // полотне внутри шпильки.
+        if (nearestCentreDistance(track, slot) >= BELT_INNER_M * 0.7) slots.push(slot)
+      }
+    }
+  }
+  return slots
+}
+
+function nearestCentreDistance(track: Track, point: TrackPoint): number {
+  let nearest = Infinity
+  for (const c of track.centerline) {
+    const d = Math.hypot(point.x - c.x, point.z - c.z)
+    if (d < nearest) nearest = d
+  }
+  return nearest
+}
+
+/** Средний шаг между точками осевой — трассы приходят с разной плотностью. */
+function spacingOf(track: Track): number {
+  const cl = track.centerline
+  if (cl.length < 2) return 1
+  let total = 0
+  for (let i = 0; i < cl.length; i += 1) {
+    const a = cl[i]
+    const b = cl[(i + 1) % cl.length]
+    total += Math.hypot(b.x - a.x, b.z - a.z)
+  }
+  return total / cl.length
+}
+
 export function treeSlots(track: Track, count: number): TrackPoint[] {
   const xs = track.centerline.map((p) => p.x)
   const zs = track.centerline.map((p) => p.z)
@@ -267,7 +340,7 @@ function crownGeometry(): THREE.BufferGeometry {
 
 export function buildTrees(track: Track, count = 420): THREE.Group {
   const group = new THREE.Group()
-  const slots = treeSlots(track, count)
+  const slots = [...beltSlots(track), ...treeSlots(track, count)]
   if (slots.length === 0) return group
 
   // InstancedMesh: сотни деревьев одним вызовом отрисовки вместо сотен.

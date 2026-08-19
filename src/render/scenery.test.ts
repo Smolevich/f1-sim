@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { grandstandSlots, HILL_INNER_M, ridgeHeight, treeSlots } from './scenery'
+import { beltSlots, grandstandSlots, HILL_INNER_M, ridgeHeight, treeSlots } from './scenery'
 import type { Track } from '../track/schema'
 
 const track: Track = JSON.parse(readFileSync('public/tracks/monza.json', 'utf8'))
@@ -65,4 +65,38 @@ test('гряда начинается за деревьями, а не на тр
   }
   const treeReach = farthest + 400
   expect(HILL_INNER_M).toBeGreaterThan(treeReach)
+})
+
+test('лесополоса прилегает к трассе, а не стоит вдалеке', () => {
+  const belt = beltSlots(track)
+  expect(belt.length).toBeGreaterThan(200)
+
+  const distances = belt.map((slot) => {
+    let nearest = Infinity
+    for (const c of track.centerline) {
+      const d = Math.hypot(slot.x - c.x, slot.z - c.z)
+      if (d < nearest) nearest = d
+    }
+    return nearest
+  })
+
+  // Ближний ряд стоит у полотна: без этого вдоль трассы остаётся голое поле.
+  expect(Math.min(...distances)).toBeLessThan(40)
+  // Но не на самой трассе — иначе деревья растут из асфальта.
+  expect(Math.min(...distances)).toBeGreaterThan(12)
+})
+
+test('лесополоса идёт по обе стороны трассы', () => {
+  const belt = beltSlots(track)
+  const start = track.centerline[0]
+  const next = track.centerline[1]
+  const heading = Math.atan2(next.x - start.x, next.z - start.z)
+  const nx = Math.cos(heading)
+  const nz = -Math.sin(heading)
+
+  // Берём деревья рядом со стартом и смотрим знак проекции на нормаль.
+  const near = belt.filter((s) => Math.hypot(s.x - start.x, s.z - start.z) < 90)
+  const sides = near.map((s) => Math.sign((s.x - start.x) * nx + (s.z - start.z) * nz))
+  expect(sides).toContain(1)
+  expect(sides).toContain(-1)
 })
