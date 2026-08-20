@@ -8,7 +8,6 @@ import { blendFactor, lerpPosition, slerpOrientation } from './render/interpolat
 import { advance, START as COUNTDOWN_START } from './timing/countdown'
 import { StartLights } from './render/start-lights'
 import { EngineSound } from './audio/engine'
-import { buildContactEffects } from './render/road-contact'
 import {
   LEVEL, lateralG, longitudinalG, settle, targetAttitude,
 } from './render/body-attitude'
@@ -134,14 +133,10 @@ async function main(): Promise<void> {
   const startLights = new StartLights()
   // Звук стартуется по первому нажатию: браузеры не дают включить его без
   // действия игрока.
-  // Пыль и следы шин: без них глазу не за что зацепиться, и болид читается
-  // как парящий над асфальтом.
-  const contact = buildContactEffects()
-  scene.add(contact.group)
-
   const engineSound = new EngineSound()
-  window.addEventListener('keydown', () => { engineSound.start() }, { once: true })
-  let soundOn = true
+  // Синтез отключён по умолчанию: пила и треугольник дают вибрирующий гул,
+  // на настоящий мотор не похожий. Включается по N, пока ищется сэмпл.
+  let soundOn = false
 
   let attitude = LEVEL
   let previousSpeedMs = 0
@@ -202,7 +197,8 @@ async function main(): Promise<void> {
     if (e.code === 'KeyH') hint.toggle()
     if (e.code === 'KeyN') {
       soundOn = !soundOn
-      if (!soundOn) engineSound.mute()
+      if (soundOn) engineSound.start()
+      else engineSound.mute()
     }
     if (e.code === 'KeyC') {
       cameraMode = nextMode(cameraMode)
@@ -246,12 +242,17 @@ async function main(): Promise<void> {
       const raw = input.read(FIXED_STEP)
       // До гашения огней газ и руль заблокированы: фальстарта в этой игре
       // нет, но и трогаться раньше отсчёта нельзя.
+      // До гашения огней передача на нейтрали: газ раскручивает мотор, но
+      // тяги на колёсах нет. Тормоз держит болид на месте — иначе он
+      // скатывается, пока идёт отсчёт.
       const controls = countdown.released
         ? raw
-        : { ...raw, throttle: 0, brake: 1, steer: 0, drs: false }
+        : { ...raw, throttle: 0, brake: 1, drs: false }
       drs = controls.drs
       lastSteer = controls.steer
-      throttleForSound = controls.throttle
+      // На нейтрали для звука берём газ игрока, а не обрезанный: мотор
+      // должен реветь на месте, как на решётке.
+      throttleForSound = countdown.released ? controls.throttle : raw.throttle
       vehicle.step(controls, FIXED_STEP)
       sessionMs += FIXED_STEP * 1000
 
@@ -325,7 +326,9 @@ async function main(): Promise<void> {
 
     const lapMs = sessionMs - (lap.startedAtMs ?? sessionMs)
 
-    if (ghost !== null) {
+    // Призрак ждёт гашения огней вместе с игроком: иначе он трогается, пока
+    // болид ещё стоит на нейтрали, и круги оказываются не сопоставимы.
+    if (ghost !== null && countdown.released) {
       const f = sampleGhost(ghost, lapMs)
       if (f !== null) {
         ghostMesh.visible = true
@@ -395,7 +398,6 @@ async function main(): Promise<void> {
       recordMs: track.meta.realRecord.timeMs,
       recordDriver: track.meta.realRecord.driver,
     })
-    contact.update(shown, heading, telemetry.speedMs, !isOnTrack(track, telemetry.position), frameSeconds)
     minimap.update(telemetry.position, heading)
     if (session.paused || session.finished || !soundOn) engineSound.mute()
     else engineSound.update(telemetry.rpm, throttleForSound)
