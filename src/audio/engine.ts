@@ -19,8 +19,8 @@ const HIGH_SAMPLE_RPM = 17_500
 const CROSSFADE_FROM = 8_000
 const CROSSFADE_TO = 10_500
 
-const IDLE_URL = '/audio/engine-idle.mp3'
-const HIGH_URL = '/audio/engine-high.mp3'
+const IDLE_URL = `${import.meta.env.BASE_URL}audio/engine-idle.mp3`
+const HIGH_URL = `${import.meta.env.BASE_URL}audio/engine-high.mp3`
 
 /**
  * Множитель скорости воспроизведения. Держим его в 0.5…1.5: за этими

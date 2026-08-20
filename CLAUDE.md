@@ -9,7 +9,11 @@
 ## Деплой
 
 `games.smolevich.com` → Cloudflare-туннель `telegram-bot` → nginx :80 на hetzner-bot.
-Статика в `/var/www/f1-sim`, API — uvicorn на :8096 (8095 занят cat-game).
+Статика в `/var/www/games`, API — uvicorn на :8096 (8095 занят cat-game).
+
+В корне домена — лендинг с выбором игры (`landing/index.html`), сама игра под
+`/f1/` (сборка Vite с `base: '/f1/'`). Новая игра добавляется своим подкаталогом
+и плиткой на лендинге; трогать nginx для этого не нужно.
 
 Только через CI (`.github/workflows/deploy.yml`). Руками на сервере не править.
 

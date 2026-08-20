@@ -4,7 +4,8 @@ import type { CarParts } from './car'
 import { buildWheel, FRONT_WHEEL, REAR_WHEEL } from './wheel-mesh'
 import { buildPalette, paintVertices } from './livery-paint'
 
-const MODEL_URL = '/models/f1-car.glb'
+// Путь от базы сборки: игра живёт в подкаталоге /f1/.
+const MODEL_URL = `${import.meta.env.BASE_URL}models/f1-car.glb`
 
 /**
  * Замеры исходной модели в её собственных единицах (см. docs/assets.md).

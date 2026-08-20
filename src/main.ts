@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   saveLiveryId(liveryId)
   const livery = liveryById(liveryId)
 
-  const track: Track = await fetch(`/tracks/${trackId}.json`).then((r) => r.json())
+  const track: Track = await fetch(`${import.meta.env.BASE_URL}tracks/${trackId}.json`).then((r) => r.json())
   scene.add(buildTrackMesh(track))
   scene.add(buildTrackLines(track))
   scene.add(buildStartLine(track))

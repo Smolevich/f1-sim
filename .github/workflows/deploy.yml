@@ -65,7 +65,7 @@ jobs:
           username: ${{ secrets.VDS_USER }}
           key: ${{ secrets.VDS_SSH_KEY }}
           passphrase: ${{ secrets.VDS_SSH_PASSPHRASE }}
-          source: dist/**,api/**,deploy/nginx-f1-sim.conf,deploy/f1-sim-api.service
+          source: dist/**,landing/**,api/**,deploy/nginx-f1-sim.conf,deploy/f1-sim-api.service
           target: /tmp/deploy-f1-sim
 
       - name: Install static site, nginx vhost and API
@@ -81,12 +81,14 @@ jobs:
           envs: VAULT_DEPLOY_TOKEN
           script: |
             set -e
-            WEB_DIR=/var/www/f1-sim
-            RELEASE_DIR=/tmp/f1-sim-web-release
+            # В корне лендинг с выбором игры, игра — в подкаталоге /f1/.
+            WEB_DIR=/var/www/games
+            RELEASE_DIR=/tmp/games-web-release
 
             rm -rf "$RELEASE_DIR"
-            mkdir -p "$RELEASE_DIR"
-            cp -a /tmp/deploy-f1-sim/dist/. "$RELEASE_DIR/"
+            mkdir -p "$RELEASE_DIR/f1"
+            cp -a /tmp/deploy-f1-sim/dist/. "$RELEASE_DIR/f1/"
+            cp -a /tmp/deploy-f1-sim/landing/index.html "$RELEASE_DIR/index.html"
 
             sudo rm -rf "$WEB_DIR"
             sudo mkdir -p /var/www
