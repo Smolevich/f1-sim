@@ -10,9 +10,15 @@
 const IDLE_RPM = 4000
 const MAX_RPM = 12_000
 
-/** Основная частота на пределе оборотов, Гц. Реальный V6 звучит около 700. */
-const MAX_FREQ = 620
-const IDLE_FREQ = 180
+/**
+ * Основная частота на пределе оборотов, Гц.
+ *
+ * 620 Гц пилой давали визг, режущий слух. Гул мотора живёт ниже: основной тон
+ * до 260 Гц, а характер даёт подтон октавой ниже. Высокие гармоники срезает
+ * фильтр — именно они и раздражают.
+ */
+const MAX_FREQ = 260
+const IDLE_FREQ = 95
 
 export function frequencyFor(rpm: number): number {
   const t = Math.max(0, Math.min(1, (rpm - IDLE_RPM) / (MAX_RPM - IDLE_RPM)))
@@ -24,7 +30,8 @@ export function frequencyFor(rpm: number): number {
 export function gainFor(throttle: number, rpm: number): number {
   const load = 0.25 + 0.75 * Math.max(0, Math.min(1, throttle))
   const revs = Math.max(0, Math.min(1, (rpm - IDLE_RPM) / (MAX_RPM - IDLE_RPM)))
-  return 0.045 * load * (0.5 + 0.5 * revs)
+  // Втрое тише прежнего: мотор должен быть фоном, а не давить.
+  return 0.016 * load * (0.5 + 0.5 * revs)
 }
 
 type Nodes = {
@@ -50,16 +57,19 @@ export class EngineSound {
     const gain = ctx.createGain()
     gain.gain.value = 0
 
-    // Фильтр срезает визг верхних гармоник пилы: без него звук режет слух.
+    // Фильтр режет верх жёстко: визг верхних гармоник и есть то, что
+    // раздражает в синтезированном моторе.
     const filter = ctx.createBiquadFilter()
     filter.type = 'lowpass'
-    filter.frequency.value = 2600
-    filter.Q.value = 0.7
+    filter.frequency.value = 900
+    filter.Q.value = 0.4
 
+    // Треугольник вместо пилы: у пилы все гармоники, у треугольника только
+    // нечётные и вдвое слабее — звук получается гулом, а не жужжанием.
     const main = ctx.createOscillator()
-    main.type = 'sawtooth'
+    main.type = 'triangle'
     const sub = ctx.createOscillator()
-    sub.type = 'square'
+    sub.type = 'sine'
 
     main.connect(filter)
     sub.connect(filter)
@@ -80,7 +90,7 @@ export class EngineSound {
     n.main.frequency.setTargetAtTime(freq, now, 0.03)
     n.sub.frequency.setTargetAtTime(freq / 2, now, 0.03)
     n.gain.gain.setTargetAtTime(gainFor(throttle, rpm), now, 0.05)
-    n.filter.frequency.setTargetAtTime(1200 + freq * 2.4, now, 0.05)
+    n.filter.frequency.setTargetAtTime(520 + freq * 1.6, now, 0.05)
   }
 
   mute(): void {

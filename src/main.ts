@@ -141,6 +141,7 @@ async function main(): Promise<void> {
 
   const engineSound = new EngineSound()
   window.addEventListener('keydown', () => { engineSound.start() }, { once: true })
+  let soundOn = true
 
   let attitude = LEVEL
   let previousSpeedMs = 0
@@ -199,6 +200,10 @@ async function main(): Promise<void> {
     if (session.paused || session.finished) return
     if (e.code === 'KeyR') recover()
     if (e.code === 'KeyH') hint.toggle()
+    if (e.code === 'KeyN') {
+      soundOn = !soundOn
+      if (!soundOn) engineSound.mute()
+    }
     if (e.code === 'KeyC') {
       cameraMode = nextMode(cameraMode)
       cameraEye = null
@@ -392,7 +397,7 @@ async function main(): Promise<void> {
     })
     contact.update(shown, heading, telemetry.speedMs, !isOnTrack(track, telemetry.position), frameSeconds)
     minimap.update(telemetry.position, heading)
-    if (session.paused || session.finished) engineSound.mute()
+    if (session.paused || session.finished || !soundOn) engineSound.mute()
     else engineSound.update(telemetry.rpm, throttleForSound)
     pauseOverlay.update(session.paused)
     finishOverlay.update(session.finished, session.bestMs ?? best?.timeMs ?? null)

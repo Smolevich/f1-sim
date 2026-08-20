@@ -6,8 +6,13 @@ test('тон растёт с оборотами', () => {
 })
 
 test('на холостых тон низкий, на пределе высокий', () => {
-  expect(frequencyFor(4000)).toBeCloseTo(180, 0)
-  expect(frequencyFor(12000)).toBeCloseTo(620, 0)
+  expect(frequencyFor(4000)).toBeCloseTo(95, 0)
+  expect(frequencyFor(12000)).toBeCloseTo(260, 0)
+})
+
+test('тон держится в области гула, а не визга', () => {
+  // Регрессия: 620 Гц пилой давали визг, режущий слух.
+  expect(frequencyFor(12000)).toBeLessThan(320)
 })
 
 test('обороты ниже холостых не роняют тон в минус', () => {
@@ -34,6 +39,6 @@ test('на холостых мотор слышен, но тихо', () => {
   expect(idle).toBeLessThan(gainFor(1, 12000) / 3)
 })
 
-test('громкость не выходит за разумный предел', () => {
-  expect(gainFor(1, 12000)).toBeLessThan(0.1)
+test('громкость остаётся фоном, а не давит', () => {
+  expect(gainFor(1, 12000)).toBeLessThan(0.025)
 })
