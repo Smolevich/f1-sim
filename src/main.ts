@@ -5,6 +5,8 @@ import { submitLap } from './net/leaderboard'
 import { Vehicle } from './physics/vehicle'
 import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
 import { blendFactor, lerpPosition, slerpOrientation } from './render/interpolate'
+import { advance, START as COUNTDOWN_START } from './timing/countdown'
+import { StartLights } from './render/start-lights'
 import {
   LEVEL, lateralG, longitudinalG, settle, targetAttitude,
 } from './render/body-attitude'
@@ -125,6 +127,10 @@ async function main(): Promise<void> {
     orientation: { x: number; y: number; z: number; w: number }
   } | null = null
 
+  // Обратный отсчёт: пока горят огни, газ не проходит — как на решётке.
+  let countdown = COUNTDOWN_START
+  const startLights = new StartLights()
+
   let attitude = LEVEL
   let previousSpeedMs = 0
 
@@ -132,6 +138,7 @@ async function main(): Promise<void> {
   let cameraLook: Vec3 | null = null
 
   const restartLap = (): void => {
+    countdown = COUNTDOWN_START
     vehicle = makeVehicle()
     lap = createLapState()
     recorder.reset()
@@ -204,6 +211,11 @@ async function main(): Promise<void> {
 
     let drs = false
     let lastSteer = 0
+    if (!countdown.released && !halted) {
+      countdown = advance(countdown, frameSeconds * 1000)
+    }
+    startLights.update(countdown.lights, !countdown.released)
+
     for (let i = 0; i < result.steps; i++) {
       // Состояние перед каждым шагом: интерполировать надо между двумя
       // последними шагами физики, а не между началом и концом кадра. Шаг
@@ -214,7 +226,12 @@ async function main(): Promise<void> {
         position: { ...vehicle.telemetry().position },
         orientation: { ...vehicle.orientation() },
       }
-      const controls = input.read(FIXED_STEP)
+      const raw = input.read(FIXED_STEP)
+      // До гашения огней газ и руль заблокированы: фальстарта в этой игре
+      // нет, но и трогаться раньше отсчёта нельзя.
+      const controls = countdown.released
+        ? raw
+        : { ...raw, throttle: 0, brake: 1, steer: 0, drs: false }
       drs = controls.drs
       lastSteer = controls.steer
       vehicle.step(controls, FIXED_STEP)

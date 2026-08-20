@@ -1,9 +1,12 @@
 import * as THREE from 'three'
 import { WHEEL_RADIUS_M } from '../physics/drivetrain'
+import { steerLimitForSpeed } from '../physics/vehicle'
 
 const WHEEL_WIDTH_M = 0.38
 /** Максимальный угол поворота колёс в рендере, совпадает с MAX_STEER_RAD физики. */
 const MAX_STEER_RAD = 0.3
+/** Колёсная база — та же, что в физике: предел руля считается через неё. */
+const WHEELBASE_M = 3.6
 
 export type CarParts = {
   group: THREE.Group
@@ -20,14 +23,18 @@ export function wheelSpinDelta(speedMs: number, dt: number): number {
  * часовой стрелки, а rotateY в vehicle.ts — по часовой. Без инверсии колёса
  * визуально поворачивают в сторону, противоположную рулю.
  */
-export function steerAngleFor(steer: number): number {
-  return -Math.max(-1, Math.min(1, steer)) * MAX_STEER_RAD
+export function steerAngleFor(steer: number, speedMs = 0): number {
+  // Тот же предел по скорости, что в физике: она на 350 км/ч даёт 0.9°, а
+  // рендер крутил полные 17.2° — в 20 раз больше. Колёса выворачивались
+  // так, как на такой скорости невозможно, и картинка врала про физику.
+  const limit = steerLimitForSpeed(speedMs, WHEELBASE_M, MAX_STEER_RAD)
+  return -Math.max(-1, Math.min(1, steer)) * limit
 }
 
 export function spinWheels(parts: CarParts, speedMs: number, steer: number, dt: number): void {
   const delta = wheelSpinDelta(speedMs, dt)
   for (const wheel of parts.wheels) wheel.rotation.x -= delta
-  const angle = steerAngleFor(steer)
+  const angle = steerAngleFor(steer, speedMs)
   for (const pivot of parts.steered) pivot.rotation.y = angle
 }
 

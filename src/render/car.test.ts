@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { expect, test } from 'vitest'
 import { spinWheels, steerAngleFor, wheelSpinDelta } from './car'
 import type { CarParts } from './car'
+import { steerLimitForSpeed } from '../physics/vehicle'
 
 test('колесо крутится тем быстрее, чем выше скорость', () => {
   expect(wheelSpinDelta(60, 0.1)).toBeGreaterThan(wheelSpinDelta(30, 0.1))
@@ -58,4 +59,22 @@ test('вращение и поворот руля живут на разных �
   }
 
   for (const tilt of tilts) expect(tilt).toBeLessThan(1e-9)
+})
+
+test('на высокой скорости колёса почти не выворачиваются', () => {
+  // Регрессия: рендер крутил полные 17.2° независимо от скорости, тогда как
+  // физика на 350 км/ч даёт 0.9° — картинка врала в 20 раз.
+  const slow = Math.abs(steerAngleFor(1, 10))
+  const fast = Math.abs(steerAngleFor(1, 97))
+  expect(fast).toBeLessThan(slow / 5)
+})
+
+test('на малой скорости руль работает на полный угол', () => {
+  expect(Math.abs(steerAngleFor(1, 2))).toBeCloseTo(0.3, 3)
+})
+
+test('угол рендера совпадает с пределом физики', () => {
+  const speed = 60
+  const physics = steerLimitForSpeed(speed, 3.6, 0.3)
+  expect(Math.abs(steerAngleFor(1, speed))).toBeCloseTo(physics, 6)
 })
