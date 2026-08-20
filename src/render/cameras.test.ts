@@ -119,3 +119,17 @@ test('компенсация держит дистанцию камеры поч
   expect(mean).toBeGreaterThan(15)
   expect(mean).toBeLessThan(19)
 })
+
+test('камера погони стоит близко — иначе болида не разглядеть', () => {
+  // Регрессия: 17 м позади и 7 м вверх превращали машину в точку.
+  const pose = cameraPose('chase', { x: 0, y: 0.5, z: 0 }, 0, 60)
+  const distance = Math.hypot(pose.eye.x, pose.eye.y - 0.5, pose.eye.z)
+  expect(distance).toBeLessThan(11)
+  expect(distance).toBeGreaterThan(6)
+})
+
+test('камера погони выше машины, но не над ней', () => {
+  const pose = cameraPose('chase', { x: 0, y: 0.5, z: 0 }, 0, 60)
+  expect(pose.eye.y).toBeGreaterThan(1.5)
+  expect(pose.eye.y).toBeLessThan(4.5)
+})
