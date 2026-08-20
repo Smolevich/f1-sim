@@ -7,6 +7,8 @@ import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
 import { blendFactor, lerpPosition, slerpOrientation } from './render/interpolate'
 import { advance, START as COUNTDOWN_START } from './timing/countdown'
 import { StartLights } from './render/start-lights'
+import { EngineSound } from './audio/engine'
+import { buildContactEffects } from './render/road-contact'
 import {
   LEVEL, lateralG, longitudinalG, settle, targetAttitude,
 } from './render/body-attitude'
@@ -130,6 +132,15 @@ async function main(): Promise<void> {
   // Обратный отсчёт: пока горят огни, газ не проходит — как на решётке.
   let countdown = COUNTDOWN_START
   const startLights = new StartLights()
+  // Звук стартуется по первому нажатию: браузеры не дают включить его без
+  // действия игрока.
+  // Пыль и следы шин: без них глазу не за что зацепиться, и болид читается
+  // как парящий над асфальтом.
+  const contact = buildContactEffects()
+  scene.add(contact.group)
+
+  const engineSound = new EngineSound()
+  window.addEventListener('keydown', () => { engineSound.start() }, { once: true })
 
   let attitude = LEVEL
   let previousSpeedMs = 0
@@ -211,6 +222,7 @@ async function main(): Promise<void> {
 
     let drs = false
     let lastSteer = 0
+    let throttleForSound = 0
     if (!countdown.released && !halted) {
       countdown = advance(countdown, frameSeconds * 1000)
     }
@@ -234,6 +246,7 @@ async function main(): Promise<void> {
         : { ...raw, throttle: 0, brake: 1, steer: 0, drs: false }
       drs = controls.drs
       lastSteer = controls.steer
+      throttleForSound = controls.throttle
       vehicle.step(controls, FIXED_STEP)
       sessionMs += FIXED_STEP * 1000
 
@@ -377,7 +390,10 @@ async function main(): Promise<void> {
       recordMs: track.meta.realRecord.timeMs,
       recordDriver: track.meta.realRecord.driver,
     })
+    contact.update(shown, heading, telemetry.speedMs, !isOnTrack(track, telemetry.position), frameSeconds)
     minimap.update(telemetry.position, heading)
+    if (session.paused || session.finished) engineSound.mute()
+    else engineSound.update(telemetry.rpm, throttleForSound)
     pauseOverlay.update(session.paused)
     finishOverlay.update(session.finished, session.bestMs ?? best?.timeMs ?? null)
 
