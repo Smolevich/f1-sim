@@ -59,3 +59,25 @@ test('интерполированный кватернион остаётся �
     expect(Math.hypot(q.x, q.y, q.z, q.w)).toBeCloseTo(1, 4)
   }
 })
+
+test('доля кадра растёт и без нового шага физики — картинка не замирает', () => {
+  // Регрессия: интерполяция шла между началом и концом кадра, а шаг 1/120
+  // против кадра 1/60 даёт то два шага, то ни одного. На кадрах без шага
+  // болид замирал: из 166 кадров 39 стояли на месте, 28 прыгали вдвое.
+  const step = 1 / 120
+  const growing = [0, step * 0.25, step * 0.5, step * 0.75]
+  const factors = growing.map((pending) => blendFactor(pending, step))
+  for (let i = 1; i < factors.length; i += 1) {
+    expect(factors[i]).toBeGreaterThan(factors[i - 1])
+  }
+})
+
+test('положение между шагами делится равномерно', () => {
+  const from = { x: 0, y: 0, z: 0 }
+  const to = { x: 0.7, y: 0, z: 0 }
+  const step = 1 / 120
+  const shown = [0.2, 0.4, 0.6, 0.8].map((part) =>
+    lerpPosition(from, to, blendFactor(step * part, step)).x)
+  const gaps = shown.slice(1).map((v, i) => v - shown[i])
+  for (const gap of gaps) expect(gap).toBeCloseTo(gaps[0], 6)
+})

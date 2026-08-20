@@ -124,6 +124,11 @@ async function main(): Promise<void> {
 
   // Визуальный наклон кузова: физика идёт по рельсам (размах тангажа 0.52°),
   // и без клевков на торможении болид выглядит парящим над дорогой.
+  let previous: {
+    position: { x: number; y: number; z: number }
+    orientation: { x: number; y: number; z: number; w: number }
+  } | null = null
+
   let attitude = LEVEL
   let previousSpeedMs = 0
 
@@ -197,17 +202,22 @@ async function main(): Promise<void> {
     const halted = session.paused || session.finished
     if (halted) acc = { pending: 0 }
 
-    // Состояние до шагов — вторая точка для интерполяции кадра.
-    const before = {
-      position: { ...vehicle.telemetry().position },
-      orientation: { ...vehicle.orientation() },
-    }
+
     const result = halted ? { acc, steps: 0 } : stepsFor(acc, frameSeconds)
     acc = result.acc
 
     let drs = false
     let lastSteer = 0
     for (let i = 0; i < result.steps; i++) {
+      // Состояние перед каждым шагом: интерполировать надо между двумя
+      // последними шагами физики, а не между началом и концом кадра. Шаг
+      // 1/120 против кадра 1/60 даёт то два шага за кадр, то ни одного, и
+      // при нуле шагов картинка замирала — болид прыгал на 74 см, потом
+      // стоял, потом снова прыгал.
+      previous = {
+        position: { ...vehicle.telemetry().position },
+        orientation: { ...vehicle.orientation() },
+      }
       const controls = input.read(FIXED_STEP)
       drs = controls.drs
       lastSteer = controls.steer
@@ -256,9 +266,12 @@ async function main(): Promise<void> {
     // Кадр рисует положение между предыдущим и текущим шагом физики: без
     // этого движение дёргается на 0.28 м в среднем и до метра в пике, потому
     // что на кадр приходится то один шаг, то два.
-    const blend = result.steps === 0 ? 1 : blendFactor(acc.pending, FIXED_STEP)
-    const shown = lerpPosition(before.position, telemetry.position, blend)
-    const shownRot = slerpOrientation(before.orientation, orientation, blend)
+    // Доля кадра внутри шага: при нуле шагов она продолжает расти, и болид
+    // доезжает вперёд вместо того, чтобы замереть до следующего шага.
+    const blend = previous === null ? 1 : blendFactor(acc.pending, FIXED_STEP)
+    const from = previous ?? { position: telemetry.position, orientation }
+    const shown = lerpPosition(from.position, telemetry.position, blend)
+    const shownRot = slerpOrientation(from.orientation, orientation, blend)
 
     if (probe !== null) probe({ ...telemetry, position: shown }, camera.position)
 
