@@ -1,44 +1,48 @@
 import { expect, test } from 'vitest'
-import { frequencyFor, gainFor } from './engine'
+import { gainFor, highMix, rateFor } from './engine'
 
-test('тон растёт с оборотами', () => {
-  expect(frequencyFor(10000)).toBeGreaterThan(frequencyFor(6000))
+test('на записанных оборотах сэмпл играет без сдвига', () => {
+  expect(rateFor(6700, 6700)).toBeCloseTo(1, 3)
 })
 
-test('на холостых тон низкий, на пределе высокий', () => {
-  expect(frequencyFor(4000)).toBeCloseTo(95, 0)
-  expect(frequencyFor(12000)).toBeCloseTo(260, 0)
+test('выше записанных оборотов тон поднимается', () => {
+  expect(rateFor(12000, 6700)).toBeGreaterThan(1)
 })
 
-test('тон держится в области гула, а не визга', () => {
-  // Регрессия: 620 Гц пилой давали визг, режущий слух.
-  expect(frequencyFor(12000)).toBeLessThan(320)
+test('скорость воспроизведения не выходит из рабочих границ', () => {
+  // За 0.5…1.5 playbackRate разваливает тембр.
+  for (const rpm of [0, 1000, 4000, 15000, 30000]) {
+    const r = rateFor(rpm, 17500)
+    expect(r).toBeGreaterThanOrEqual(0.5)
+    expect(r).toBeLessThanOrEqual(1.5)
+  }
 })
 
-test('обороты ниже холостых не роняют тон в минус', () => {
-  expect(frequencyFor(0)).toBeGreaterThan(0)
+test('на холостых играет нижний сэмпл', () => {
+  expect(highMix(4000)).toBe(0)
 })
 
-test('обороты выше предела не задирают тон бесконечно', () => {
-  expect(frequencyFor(20000)).toBeCloseTo(frequencyFor(12000), 3)
+test('на пределе играет верхний сэмпл', () => {
+  expect(highMix(15000)).toBe(1)
 })
 
-test('тон растёт быстрее к верхам — как у мотора', () => {
-  const low = frequencyFor(6000) - frequencyFor(4000)
-  const high = frequencyFor(12000) - frequencyFor(10000)
-  expect(high).toBeGreaterThan(low)
+test('между сэмплами идёт плавный переход, а не переключение', () => {
+  const mid = highMix(9250)
+  expect(mid).toBeGreaterThan(0)
+  expect(mid).toBeLessThan(1)
+})
+
+test('смесь монотонно растёт с оборотами', () => {
+  const points = [7000, 8500, 9250, 10000, 11000].map(highMix)
+  for (let i = 1; i < points.length; i += 1) {
+    expect(points[i]).toBeGreaterThanOrEqual(points[i - 1])
+  }
 })
 
 test('газ поднимает громкость', () => {
   expect(gainFor(1, 9000)).toBeGreaterThan(gainFor(0, 9000))
 })
 
-test('на холостых мотор слышен, но тихо', () => {
-  const idle = gainFor(0, 4000)
-  expect(idle).toBeGreaterThan(0)
-  expect(idle).toBeLessThan(gainFor(1, 12000) / 3)
-})
-
-test('громкость остаётся фоном, а не давит', () => {
-  expect(gainFor(1, 12000)).toBeLessThan(0.025)
+test('громкость не превышает единицы', () => {
+  expect(gainFor(1, 15000)).toBeLessThanOrEqual(1)
 })

@@ -64,8 +64,16 @@ const ENGINE_COVER: Keyframe[] = [
 export function buildCarV3(livery: number, accent: number): CarParts {
   const group = new THREE.Group()
 
-  const body = new THREE.MeshStandardMaterial({
-    color: livery, metalness: 0.4, roughness: 0.32,
+  // Лак: прозрачный слой поверх краски. MeshStandardMaterial его не умеет, и
+  // кузов выходил матовым пластиком при любой металличности. clearcoat даёт
+  // тот самый глянец, по которому глаз узнаёт покрашенный кузов.
+  const body = new THREE.MeshPhysicalMaterial({
+    color: livery,
+    metalness: 0.05,
+    roughness: 0.35,
+    clearcoat: 1,
+    clearcoatRoughness: 0.06,
+    envMapIntensity: 0.9,
   })
   const carbon = new THREE.MeshStandardMaterial({
     color: 0x1d1f24, metalness: 0.35, roughness: 0.48,
@@ -73,8 +81,13 @@ export function buildCarV3(livery: number, accent: number): CarParts {
   const dark = new THREE.MeshStandardMaterial({
     color: 0x101216, metalness: 0.2, roughness: 0.72,
   })
-  const trim = new THREE.MeshStandardMaterial({
-    color: accent, metalness: 0.48, roughness: 0.3,
+  const trim = new THREE.MeshPhysicalMaterial({
+    color: accent,
+    metalness: 0.08,
+    roughness: 0.3,
+    clearcoat: 1,
+    clearcoatRoughness: 0.08,
+    envMapIntensity: 0.9,
   })
 
   const add = (g: THREE.BufferGeometry, m: THREE.Material): void => {

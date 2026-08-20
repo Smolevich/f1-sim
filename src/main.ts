@@ -134,9 +134,10 @@ async function main(): Promise<void> {
   // Звук стартуется по первому нажатию: браузеры не дают включить его без
   // действия игрока.
   const engineSound = new EngineSound()
-  // Синтез отключён по умолчанию: пила и треугольник дают вибрирующий гул,
-  // на настоящий мотор не похожий. Включается по N, пока ищется сэмпл.
-  let soundOn = false
+  // Звук на записи настоящего V8 (CC0), а не синтез: включён по умолчанию,
+  // но браузер даёт его только после действия игрока.
+  let soundOn = true
+  window.addEventListener('keydown', () => { void engineSound.start() }, { once: true })
 
   let attitude = LEVEL
   let previousSpeedMs = 0
@@ -197,7 +198,7 @@ async function main(): Promise<void> {
     if (e.code === 'KeyH') hint.toggle()
     if (e.code === 'KeyN') {
       soundOn = !soundOn
-      if (soundOn) engineSound.start()
+      if (soundOn) void engineSound.start()
       else engineSound.mute()
     }
     if (e.code === 'KeyC') {

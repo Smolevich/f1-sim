@@ -76,6 +76,21 @@ export function createScene(canvas: HTMLCanvasElement): {
     renderer.setSize(window.innerWidth, window.innerHeight)
   })
 
+  // Карта окружения из самой сцены: кузов болида читается отражениями — лак
+  // и металл различаются не формой, а тем, что отражают. Без scene.environment
+  // любая геометрия выглядит пластилином, сколько бы в ней ни было полигонов.
+  //
+  // Куб снимается один раз из точки над трассой и прогоняется через PMREM.
+  // HDRI-файл тянуть незачем: небо, земля и горизонт здесь уже свои.
+  const pmrem = new THREE.PMREMGenerator(renderer)
+  const cubeTarget = new THREE.WebGLCubeRenderTarget(256)
+  const cubeCamera = new THREE.CubeCamera(1, 4000, cubeTarget)
+  cubeCamera.position.set(0, 30, 0)
+  cubeCamera.update(renderer, scene)
+  scene.environment = pmrem.fromCubemap(cubeTarget.texture).texture
+  cubeTarget.dispose()
+  pmrem.dispose()
+
   return { scene, camera, renderer, sun, sky }
 }
 

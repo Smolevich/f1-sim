@@ -28,11 +28,14 @@ const SPOKE_COUNT = 5
 export function buildWheel(spec: WheelSpec): THREE.Group {
   const wheel = new THREE.Group()
 
+  // Резина почти не отражает — иначе покрышка блестит как пластик.
   const rubber = new THREE.MeshStandardMaterial({
-    color: 0x16181d, roughness: 0.95, metalness: 0.02,
+    color: 0x16181d, roughness: 0.96, metalness: 0, envMapIntensity: 0.2,
   })
+  // Обод — настоящий металл: с картой окружения ему есть что отражать, без
+  // неё metalness 0.9 давал чёрное пятно вместо диска.
   const metal = new THREE.MeshStandardMaterial({
-    color: 0x9aa2ad, roughness: 0.35, metalness: 0.55,
+    color: 0xa8b0bb, roughness: 0.25, metalness: 0.85, envMapIntensity: 1.1,
   })
 
   // Покрышка: цилиндр, а не тор — у формульной резины профиль почти прямой,
