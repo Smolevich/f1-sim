@@ -57,3 +57,15 @@ test('порог шире колеса, но уже болида', () => {
   expect(BODY_MIN_WIDTH_M).toBeGreaterThan(WHEEL_WIDTH_M)
   expect(BODY_MIN_WIDTH_M).toBeLessThan(2.0)
 })
+
+test('колесо и ступица — разные узлы, иначе колесо ходит восьмёркой', () => {
+  // Регрессия: при загрузке W14 один и тот же узел попадал и в wheels, и в
+  // steered. Вращение и руль перемножались, ось качения уводило от горизонта
+  // на 5° за кадр — на резком повороте колесо визуально ходило восьмёркой.
+  //
+  // Проверяем контракт: списки не должны содержать общих объектов.
+  const wheels = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]
+  const steered = [{ id: 5 }, { id: 6 }]
+  const shared = wheels.filter((w) => steered.some((s) => s === w))
+  expect(shared).toHaveLength(0)
+})

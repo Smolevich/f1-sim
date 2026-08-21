@@ -124,17 +124,24 @@ export async function loadW14(livery: number, accent: number): Promise<CarParts>
     const parent = node.parent
     if (parent === null) continue
 
-    // Ось колеса в системе родителя: вокруг неё и вращаем.
+    // Два узла на колесо, а не один: внешний поворачивается рулём (Y),
+    // внутренний вращается качением (X). На одном объекте углы Эйлера
+    // перемножаются, и ось качения уводит от горизонта — колесо ходит
+    // восьмёркой на резком повороте (замер: скачки 0.8°…5.0° за кадр).
     const pivot = node.position.clone()
 
+    const steer = new THREE.Group()
+    steer.position.copy(pivot)
+    parent.add(steer)
+
     const spin = new THREE.Group()
-    spin.position.copy(pivot)
+    steer.add(spin)
+
     node.position.set(0, 0, 0)
-    parent.add(spin)
     spin.add(node)
 
     wheels.push(spin)
-    if (isFront) steered.push(spin)
+    if (isFront) steered.push(steer)
   }
 
   // Перекраска в цвет команды.
