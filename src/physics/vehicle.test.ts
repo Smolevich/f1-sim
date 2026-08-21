@@ -184,3 +184,23 @@ test('руль поворачивает в заданную сторону', () 
   expect(Math.abs(right)).toBeGreaterThan(0.05)
   expect(Math.sign(right)).toBe(-Math.sign(left))
 })
+
+test('стояночный тормоз держит болид на месте при полном газе', () => {
+  // Регрессия: обычный тормоз ниже 1.5 м/с работает задним ходом, чтобы можно
+  // было отъехать от стены, и на старте толкал болид назад — за 5 секунд
+  // отсчёта он уезжал на 7.6 м при газе в пол.
+  const v = new Vehicle()
+  const start = { ...v.telemetry().position }
+  const held: CarInput = {
+    throttle: 1, brake: 1, steer: 0, gear: 1, drs: false, handbrake: true,
+  }
+  run(v, held, 5)
+  const now = v.telemetry().position
+  expect(Math.hypot(now.x - start.x, now.z - start.z)).toBeLessThan(1)
+})
+
+test('без стояночного тормоза болид едет — ручник не ломает езду', () => {
+  const v = new Vehicle()
+  run(v, full, 3)
+  expect(v.telemetry().speedMs).toBeGreaterThan(10)
+})

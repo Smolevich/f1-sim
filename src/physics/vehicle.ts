@@ -11,6 +11,14 @@ export type CarInput = {
   steer: number
   gear: number
   drs: boolean
+  /**
+   * Стояночный тормоз: держит болид на месте намертво.
+   *
+   * Обычный тормоз для этого не годится — ниже REVERSE_SPEED_MS он работает
+   * задним ходом, чтобы можно было отъехать от стены, и на старте вместо
+   * удержания толкал болид назад: за 5 секунд отсчёта он уезжал на 7.6 м.
+   */
+  handbrake?: boolean
 }
 
 export type CarTelemetry = {
@@ -318,9 +326,13 @@ export class Vehicle {
       // Почти на месте тормоз работает как задний ход: без этого болид,
       // упёршийся носом в отбойник, застревает навсегда — Math.sign(longVel)
       // на нулевой скорости обнуляет тормозную силу, и выехать нечем.
-      const brakingN = Math.abs(longVel) < REVERSE_SPEED_MS
-        ? -REVERSE_FORCE_N / 4 * clamp(input.brake, 0, 1)
-        : Math.sign(longVel) * brakeN
+      // Стояночный тормоз гасит и продольную, и поперечную скорость: болид
+      // стоит, пока его держат, и не сползает по уклону.
+      const brakingN = input.handbrake === true
+        ? Math.sign(longVel) * brakeN + longVel * 4_000
+        : Math.abs(longVel) < REVERSE_SPEED_MS
+          ? -REVERSE_FORCE_N / 4 * clamp(input.brake, 0, 1)
+          : Math.sign(longVel) * brakeN
       const longN = clamp(tractionN - brakingN, -longCapN, longCapN)
       const force = { longitudinal: longN, lateral: latN }
       this.lateralForces[i] = latN

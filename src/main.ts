@@ -30,6 +30,7 @@ import { FinishOverlay, PauseOverlay } from './render/overlays'
 import { createScene } from './render/scene'
 import { buildStartLine, buildTrackLines, buildTrackMesh } from './render/track-mesh'
 import { buildBarriers, buildKerbs } from './render/trackside'
+import { buildSpeedCues } from './render/speed-cues'
 import {
   loadBest, loadGhost, loadLiveryId, loadName, loadTrackId,
   saveBest, saveGhost, saveLiveryId, saveName, saveTrackId,
@@ -69,6 +70,9 @@ async function main(): Promise<void> {
   scene.add(buildTrackLines(track))
   scene.add(buildStartLine(track))
   scene.add(buildKerbs(track))
+  // Столбики и разметка у кромки: ближайший объект сцены стоял в 21 м от
+  // трассы, и скорость было не с чем сопоставить.
+  scene.add(buildSpeedCues(track))
   scene.add(buildBarriers(track))
   scene.add(buildRacingLine(track))
   scene.add(buildBrakingMarkers(track))
@@ -243,12 +247,13 @@ async function main(): Promise<void> {
       const raw = input.read(FIXED_STEP)
       // До гашения огней газ и руль заблокированы: фальстарта в этой игре
       // нет, но и трогаться раньше отсчёта нельзя.
-      // До гашения огней передача на нейтрали: газ раскручивает мотор, но
-      // тяги на колёсах нет. Тормоз держит болид на месте — иначе он
-      // скатывается, пока идёт отсчёт.
+      // До гашения огней болид на нейтрали и стояночном тормозе: газ
+      // раскручивает мотор, тяги на колёсах нет. Ручник обязателен — обычный
+      // тормоз ниже 1.5 м/с работает задним ходом и уводил болид на 7.6 м
+      // за время отсчёта.
       const controls = countdown.released
         ? raw
-        : { ...raw, throttle: 0, brake: 1, drs: false }
+        : { ...raw, throttle: 0, brake: 1, drs: false, handbrake: true }
       drs = controls.drs
       lastSteer = controls.steer
       // На нейтрали для звука берём газ игрока, а не обрезанный: мотор
