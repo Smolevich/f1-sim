@@ -15,6 +15,7 @@ import { buildBrakingMarkers, buildRacingLine } from './render/braking'
 import { ControlsHint } from './render/controls-hint'
 import { spinWheels } from './render/car'
 import { buildCarV3 } from './render/car-v3'
+import { loadW14 } from './render/w14-model'
 import { liveryById } from './render/liveries'
 import { buildGrandstands, buildHills, buildTrees } from './render/scenery'
 import {
@@ -80,10 +81,13 @@ async function main(): Promise<void> {
   scene.add(buildTrees(track))
   scene.add(buildHills(track))
 
-  // Своя модель на гладких поверхностях: 16.5 тыс. треугольников против
-  // 3.5 тыс. у первой попытки, обводы по сплайну вместо плоских сечений.
-  // Ничего не грузится из сети — падать нечему.
-  const carParts = buildCarV3(livery.primary, livery.accent)
+  // Модель W14: 232 тыс. треугольников против 16.5 тыс. у собственной
+  // геометрии, колёса отдельными узлами. Если glb не отдался, остаётся своя
+  // модель — пустая сцена ломает игру.
+  const carParts = await loadW14(livery.primary, livery.accent).catch((err: unknown) => {
+    console.warn('модель W14 не загрузилась, беру свою', err)
+    return buildCarV3(livery.primary, livery.accent)
+  })
   const carMesh = carParts.group
   scene.add(carMesh)
   // Призрак — копия того меша, что реально доехал до сцены, чтобы силуэты совпадали.
