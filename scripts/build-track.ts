@@ -1,5 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { centerlineLength, validateTrack, type Track, type TrackPoint } from '../src/track/schema'
+import { relativeElevations, smoothElevations } from '../src/track/elevation'
+import { stitchLoop } from '../src/track/stitch'
 
 const OVERPASS = 'https://overpass-api.de/api/interpreter'
 
@@ -127,7 +129,9 @@ type OsmWay = { id: number; tags?: Record<string, string>; geometry: LatLon[] }
  * произвольном направлении, поэтому узлы нельзя просто ссыпать в один массив:
  * получится каша. Участки сшиваются голова-к-хвосту в замкнутый контур.
  */
-async function fetchCenterline(source: OsmSource, excludeNames: string[]): Promise<LatLon[]> {
+async function fetchCenterline(
+  source: OsmSource, excludeNames: string[], officialLengthM: number,
+): Promise<LatLon[]> {
   const query = source.kind === 'relation'
     ? `[out:json][timeout:90];rel(${source.relationId});way(r);out geom;`
     : `[out:json][timeout:90];way(id:${source.wayIds.join(',')});out geom;`
@@ -153,40 +157,7 @@ async function fetchCenterline(source: OsmSource, excludeNames: string[]): Promi
   const label = source.kind === 'relation' ? `отношении ${source.relationId}` : 'списке ways'
   if (pool.length === 0) throw new Error(`в ${label} нет участков с геометрией`)
 
-  const first = pool.shift()!
-  let path = first.geometry.slice()
-
-  while (pool.length > 0) {
-    const tail = nodeKey(path[path.length - 1])
-
-    const forward = pool.findIndex((w) => nodeKey(w.geometry[0]) === tail)
-    if (forward >= 0) {
-      path = path.concat(pool[forward].geometry.slice(1))
-      pool.splice(forward, 1)
-      continue
-    }
-
-    const backward = pool.findIndex((w) => nodeKey(w.geometry[w.geometry.length - 1]) === tail)
-    if (backward >= 0) {
-      path = path.concat(pool[backward].geometry.slice().reverse().slice(1))
-      pool.splice(backward, 1)
-      continue
-    }
-
-    throw new Error(
-      `осевая рвётся: не пристыковано ${pool.length} участков (${pool.map((w) => w.name).join(', ')})`,
-    )
-  }
-
-  // Замыкающая точка совпадает со стартовой — в кольце она лишняя.
-  if (path.length > 1 && nodeKey(path[0]) === nodeKey(path[path.length - 1])) path.pop()
-
-  return path
-}
-
-/** Координаты в OSM точны до ~1e-7 градуса; по этой строке узлы и сшиваются. */
-function nodeKey(p: LatLon): string {
-  return `${p.lat.toFixed(7)},${p.lon.toFixed(7)}`
+  return stitchLoop(pool, officialLengthM)
 }
 
 /**
@@ -203,6 +174,35 @@ function toMeters(points: { lat: number; lon: number }[]): TrackPoint[] {
     y: 0,
     z: (p.lat - lat0) * mPerDegLat,
   }))
+}
+
+/**
+ * Реальные высоты трассы из SRTM (данные радарной съёмки шаттла — те же, что
+ * под рельефом Google Earth). Без них трасса плоская: Монца лежит на 183-194 м,
+ * и её подъёмы с спусками просто не видны.
+ *
+ * API берёт до 100 точек за запрос, поэтому идём пакетами. Между пакетами
+ * пауза: сервис публичный и просит не частить.
+ */
+const ELEVATION_API = 'https://api.opentopodata.org/v1/srtm90m'
+const ELEVATION_BATCH = 90
+
+async function fetchElevations(points: LatLon[]): Promise<number[]> {
+  const out: number[] = []
+  for (let i = 0; i < points.length; i += ELEVATION_BATCH) {
+    const batch = points.slice(i, i + ELEVATION_BATCH)
+    const locations = batch.map((p) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`).join('|')
+    const res = await fetch(`${ELEVATION_API}?locations=${locations}`, {
+      headers: { 'User-Agent': 'f1-sim track builder' },
+    })
+    if (!res.ok) throw new Error(`высоты: сервис ответил ${res.status}`)
+    const data = await res.json() as { results?: { elevation: number | null }[] }
+    for (const r of data.results ?? []) out.push(r.elevation ?? 0)
+    if (i + ELEVATION_BATCH < points.length) {
+      await new Promise((resolve) => setTimeout(resolve, 1100))
+    }
+  }
+  return out
 }
 
 /** Скользящее среднее: убирает дрожание OSM-узлов, не сдвигая линию. */
@@ -223,8 +223,12 @@ async function main(): Promise<void> {
   const circuit = CIRCUITS[id]
   if (!circuit) throw new Error(`неизвестная трасса: ${id}. Есть: ${Object.keys(CIRCUITS).join(', ')}`)
 
-  const raw = await fetchCenterline(circuit.source, circuit.excludeWayNames)
+  const raw = await fetchCenterline(circuit.source, circuit.excludeWayNames, circuit.officialLengthM)
   const centerline = smooth(toMeters(raw), 2)
+
+  console.log('высоты: запрашиваю рельеф по', raw.length, 'точкам…')
+  const elevationsM = relativeElevations(smoothElevations(await fetchElevations(raw), 3))
+  console.log(`перепад высот: ${Math.max(...elevationsM).toFixed(1)} м`)
 
   const track: Track = {
     meta: {
@@ -237,6 +241,7 @@ async function main(): Promise<void> {
     centerline,
     widthM: circuit.widthM,
     sectorSplits: circuit.sectorSplits,
+    elevationsM,
   }
 
   const problems = validateTrack(track)

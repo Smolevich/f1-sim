@@ -46,6 +46,8 @@ import {
 } from './timing/laptimer'
 import { recoveryPose } from './track/recovery'
 import { isOnTrack, startPose } from './track/geometry'
+import { elevationAt, withElevations } from './track/elevation'
+import { buildTerrainSkirt } from './render/terrain'
 import type { Track } from './track/schema'
 
 async function main(): Promise<void> {
@@ -67,19 +69,24 @@ async function main(): Promise<void> {
   const livery = liveryById(liveryId)
 
   const track: Track = await fetch(`${import.meta.env.BASE_URL}tracks/${trackId}.json`).then((r) => r.json())
-  scene.add(buildTrackMesh(track))
-  scene.add(buildTrackLines(track))
-  scene.add(buildStartLine(track))
-  scene.add(buildKerbs(track))
+  // Рельеф — только в картинке: сцена строится из трека с высотами SRTM,
+  // а физика и тайминг ниже получают исходный плоский трек, чтобы старые
+  // рекорды остались сопоставимы с новыми.
+  const visualTrack = withElevations(track)
+  scene.add(buildTerrainSkirt(visualTrack))
+  scene.add(buildTrackMesh(visualTrack))
+  scene.add(buildTrackLines(visualTrack))
+  scene.add(buildStartLine(visualTrack))
+  scene.add(buildKerbs(visualTrack))
   // Столбики и разметка у кромки: ближайший объект сцены стоял в 21 м от
   // трассы, и скорость было не с чем сопоставить.
-  scene.add(buildSpeedCues(track))
-  scene.add(buildBarriers(track))
-  scene.add(buildRacingLine(track))
-  scene.add(buildBrakingMarkers(track))
-  scene.add(buildGrandstands(track))
-  scene.add(buildTrees(track))
-  scene.add(buildHills(track))
+  scene.add(buildSpeedCues(visualTrack))
+  scene.add(buildBarriers(visualTrack))
+  scene.add(buildRacingLine(visualTrack))
+  scene.add(buildBrakingMarkers(visualTrack))
+  scene.add(buildGrandstands(visualTrack))
+  scene.add(buildTrees(visualTrack))
+  scene.add(buildHills(visualTrack))
 
   // Модель W14: 232 тыс. треугольников против 16.5 тыс. у собственной
   // геометрии, колёса отдельными узлами. Если glb не отдался, остаётся своя
@@ -317,7 +324,9 @@ async function main(): Promise<void> {
 
     if (probe !== null) probe({ ...telemetry, position: shown }, camera.position)
 
-    carMesh.position.set(shown.x, shown.y, shown.z)
+    // Физика ездит по плоскости — на визуальный рельеф болид поднимает рендер.
+    const lift = elevationAt(track, shown.x, shown.z)
+    carMesh.position.set(shown.x, shown.y + lift, shown.z)
     carMesh.quaternion.set(shownRot.x, shownRot.y, shownRot.z, shownRot.w)
 
     const longG = longitudinalG(telemetry.speedMs, previousSpeedMs, frameSeconds)
@@ -342,7 +351,7 @@ async function main(): Promise<void> {
       const f = sampleGhost(ghost, lapMs)
       if (f !== null) {
         ghostMesh.visible = true
-        ghostMesh.position.set(f.x, f.y, f.z)
+        ghostMesh.position.set(f.x, f.y + elevationAt(track, f.x, f.z), f.z)
         // Призрак хранит только рыскание: болид не переворачивается.
         ghostMesh.quaternion.set(0, f.qy, 0, f.qw)
       }
@@ -352,7 +361,7 @@ async function main(): Promise<void> {
       2 * (orientation.w * orientation.y + orientation.x * orientation.z),
       1 - 2 * (orientation.y * orientation.y + orientation.z * orientation.z),
     )
-    const pose = cameraPose(cameraMode, shown, heading, telemetry.speedMs)
+    const pose = cameraPose(cameraMode, { ...shown, y: shown.y + lift }, heading, telemetry.speedMs)
     const rate = SMOOTH_RATE[cameraMode]
     // На первом кадре и после смены режима догонять нечего: камера ставится
     // сразу, иначе она приезжает издалека через полсекунды.

@@ -13,6 +13,12 @@ export type Track = {
   centerline: TrackPoint[]
   widthM: number
   sectorSplits: [number, number]
+  /**
+   * Высоты рельефа в узлах осевой, метры от самой низкой точки трассы.
+   * Только для картинки: физика и тайминг ездят по плоской осевой (y=0),
+   * иначе рекорды до и после рельефа стали бы несравнимыми.
+   */
+  elevationsM?: number[]
 }
 
 const MIN_POINTS = 4
@@ -60,6 +66,12 @@ export function validateTrack(track: Track): string[] {
   }
 
   if (track.widthM <= 0) problems.push(`ширина должна быть положительной: ${track.widthM}`)
+
+  if (track.elevationsM && track.elevationsM.length !== track.centerline.length) {
+    problems.push(
+      `высот ${track.elevationsM.length}, а узлов осевой ${track.centerline.length}`,
+    )
+  }
 
   return problems
 }

@@ -47,3 +47,8 @@ test('сектора вне диапазона — это проблема', () 
   track.sectorSplits = [0.9, 0.2]
   expect(validateTrack(track)).toContainEqual(expect.stringContaining('сектор'))
 })
+
+test('высоты не по числу узлов осевой — это проблема', () => {
+  const track = { ...square(100), elevationsM: [0, 5] }
+  expect(validateTrack(track).some((p) => p.includes('высот'))).toBe(true)
+})
