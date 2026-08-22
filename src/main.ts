@@ -123,7 +123,6 @@ async function main(): Promise<void> {
   const input = new KeyboardInput()
   const gamepad = new GamepadInput()
   const touch = new TouchInput()
-  if (isTouchDevice()) document.body.appendChild(buildTouchOverlay(touch))
   const minimap = new Minimap(track, document.body, isTouchDevice())
   const recorder = new GhostRecorder()
 
@@ -200,6 +199,7 @@ async function main(): Promise<void> {
     cameraEye = null
     cameraLook = null
   }
+  if (isTouchDevice()) document.body.appendChild(buildTouchOverlay(touch, recover))
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyM' && (session.finished || session.paused)) {

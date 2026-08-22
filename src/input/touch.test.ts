@@ -9,22 +9,31 @@ test('нажатый газ даёт полный газ, отпущенный �
   expect(touch.read(0.1).throttle).toBe(0)
 })
 
-test('руль набирается плавно, как с клавиатуры, а не ступенькой', () => {
+test('палец на слайдере — аналоговый руль, а не ступенька 0/1', () => {
   const touch = new TouchInput()
-  touch.press('right')
-  const early = touch.read(0.05).steer
-  expect(early).toBeGreaterThan(0)
-  expect(early).toBeLessThan(0.5)
-  const later = touch.read(0.3).steer
-  expect(later).toBeGreaterThan(early)
+  touch.setSteer(0.4)
+  // Пара кадров на сглаживание дрожи пальца.
+  touch.read(0.1)
+  const steer = touch.read(0.1).steer
+  expect(steer).toBeGreaterThan(0.3)
+  expect(steer).toBeLessThanOrEqual(0.4)
 })
 
-test('отпустил руль — возврат к нулю', () => {
+test('руль следует за пальцем в обе стороны без отпускания', () => {
   const touch = new TouchInput()
-  touch.press('left')
+  touch.setSteer(0.8)
+  touch.read(0.2); touch.read(0.2)
+  touch.setSteer(-0.8)
+  touch.read(0.2); touch.read(0.2); touch.read(0.2)
+  expect(touch.read(0.2).steer).toBeLessThan(-0.5)
+})
+
+test('палец отпущен — руль возвращается к нулю', () => {
+  const touch = new TouchInput()
+  touch.setSteer(1)
   touch.read(0.3)
-  touch.release('left')
-  touch.read(0.3)
+  touch.clearSteer()
+  touch.read(0.3); touch.read(0.3)
   expect(touch.read(0.3).steer).toBe(0)
 })
 
