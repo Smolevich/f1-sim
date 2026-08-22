@@ -20,7 +20,7 @@ const INNER_DROP_M = 0.12
 const OUTER_Y = -0.25
 
 /** Шаг сетки поля: мельче — глаже кромка травы, но больше треугольников. */
-const GRID_STEP_M = 20
+const GRID_STEP_M = 10
 
 /** Доля высоты трассы на расстоянии d от кромки: smoothstep от 1 до 0. */
 export function skirtFalloff(distanceM: number): number {
@@ -59,9 +59,25 @@ export function terrainHeight(track: Track, x: number, z: number): number {
   return k * (elevation - INNER_DROP_M) + (1 - k) * OUTER_Y
 }
 
-/** Вершины поля отдельно от материала: обход проверяется тестом без DOM. */
-export function terrainPositions(track: Track): number[] {
+export type TerrainGrid = {
+  minX: number
+  minZ: number
+  step: number
+  heights: number[][]
+}
+
+/**
+ * Высоты в узлах сетки поля. Гарантия «трава не выше полотна» держится на
+ * зажиме: вершина ближе (полширины + диагональ клетки) к осевой не бывает
+ * выше локального минимума полотна минус зазор. Любая точка дороги лежит в
+ * клетке, все четыре угла которой попадают под зажим её сегмента, поэтому
+ * интерполяция между узлами полотно проткнуть не может — в узлах гарантия
+ * была и раньше, а между ними на уклонах и в связках вылезали шматки травы.
+ */
+export function terrainGrid(track: Track): TerrainGrid {
   const cl = track.centerline
+  const el = track.elevationsM
+  const n = cl.length
   const outer = SKIRT_RING_DISTANCES_M[SKIRT_RING_DISTANCES_M.length - 1]
   const margin = outer + track.widthM / 2 + GRID_STEP_M
 
@@ -74,16 +90,54 @@ export function terrainPositions(track: Track): number[] {
 
   const nx = Math.ceil((maxX - minX) / GRID_STEP_M)
   const nz = Math.ceil((maxZ - minZ) / GRID_STEP_M)
+  const clampReach = track.widthM / 2 + Math.SQRT2 * GRID_STEP_M
 
-  // Высоты в узлах сетки; клетки целиком на плоской земле не рисуем — их
-  // закрывает плоскость сцены на -0.3.
   const heights: number[][] = []
   for (let ix = 0; ix <= nx; ix++) {
     heights.push([])
     for (let iz = 0; iz <= nz; iz++) {
-      heights[ix].push(terrainHeight(track, minX + ix * GRID_STEP_M, minZ + iz * GRID_STEP_M))
+      const x = minX + ix * GRID_STEP_M
+      const z = minZ + iz * GRID_STEP_M
+
+      // Один проход по сегментам: ближайший (для высоты поля) и минимум
+      // полотна среди сегментов в радиусе зажима.
+      let bestDist = Infinity
+      let elevation = 0
+      let clampTo = Infinity
+      for (let i = 0; i < n; i++) {
+        const a = cl[i]
+        const j = (i + 1) % n
+        const b = cl[j]
+        const dx = b.x - a.x
+        const dz = b.z - a.z
+        const lengthSq = dx * dx + dz * dz || 1
+        const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / lengthSq))
+        const dist = Math.hypot(x - (a.x + t * dx), z - (a.z + t * dz))
+        if (dist < bestDist) {
+          bestDist = dist
+          if (el && el.length === n) elevation = el[i] + t * (el[j] - el[i])
+        }
+        if (el && el.length === n && dist <= clampReach) {
+          clampTo = Math.min(clampTo, Math.min(el[i], el[j]))
+        }
+      }
+
+      const edgeDist = Math.max(0, bestDist - track.widthM / 2)
+      const k = skirtFalloff(edgeDist)
+      let y = k * (elevation - INNER_DROP_M) + (1 - k) * OUTER_Y
+      if (clampTo !== Infinity) y = Math.min(y, clampTo - INNER_DROP_M)
+      heights[ix].push(y)
     }
   }
+
+  return { minX, minZ, step: GRID_STEP_M, heights }
+}
+
+/** Вершины поля отдельно от материала: обход проверяется тестом без DOM. */
+export function terrainPositions(track: Track): number[] {
+  const { minX, minZ, heights } = terrainGrid(track)
+  const nx = heights.length - 1
+  const nz = heights[0].length - 1
 
   const positions: number[] = []
   const flatY = OUTER_Y + 0.001

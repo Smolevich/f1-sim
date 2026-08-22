@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { skirtFalloff, SKIRT_RING_DISTANCES_M, terrainHeight, terrainPositions } from './terrain'
+import { skirtFalloff, SKIRT_RING_DISTANCES_M, terrainGrid, terrainHeight, terrainPositions } from './terrain'
 import type { Track } from '../track/schema'
 
 test('у кромки полотна юбка держит высоту трассы', () => {
@@ -70,5 +70,37 @@ test('треугольники поля смотрят нормалями вве
     const e2 = [positions[t + 6] - positions[t], positions[t + 7] - positions[t + 1], positions[t + 8] - positions[t + 2]]
     const ny = e1[2] * e2[0] - e1[0] * e2[2]
     expect(ny).toBeGreaterThan(0)
+  }
+})
+
+/** Два уровня в 30 м друг от друга по горизонтали и 12 м по высоте — Монако. */
+function stackedTrack(): Track {
+  return {
+    meta: {
+      id: 's', name: 'S', country: 'XX', officialLengthM: 2100,
+      realRecord: { timeMs: 1, driver: 'X', year: 2026 },
+    },
+    centerline: [
+      { x: 0, y: 0, z: 0 }, { x: 500, y: 0, z: 0 }, { x: 1000, y: 0, z: 0 },
+      { x: 1000, y: 0, z: 30 }, { x: 500, y: 0, z: 30 }, { x: 0, y: 0, z: 30 },
+    ],
+    widthM: 10,
+    sectorSplits: [0.3, 0.6],
+    elevationsM: [12, 12, 12, 0, 0, 0],
+  }
+}
+
+test('углы клеток под полотном не выше полотна — шматки травы не возвращаются', () => {
+  const track = stackedTrack()
+  const grid = terrainGrid(track)
+  // Точки на нижней дороге (z=30, высота 0) каждые 5 м.
+  for (let x = 100; x <= 900; x += 5) {
+    for (const z of [26, 30, 34]) {
+      const ix = Math.floor((x - grid.minX) / grid.step)
+      const iz = Math.floor((z - grid.minZ) / grid.step)
+      for (const [cx, cz] of [[ix, iz], [ix + 1, iz], [ix, iz + 1], [ix + 1, iz + 1]]) {
+        expect(grid.heights[cx][cz]).toBeLessThan(0)
+      }
+    }
   }
 })
