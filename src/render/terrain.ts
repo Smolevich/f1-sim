@@ -59,7 +59,8 @@ export function terrainHeight(track: Track, x: number, z: number): number {
   return k * (elevation - INNER_DROP_M) + (1 - k) * OUTER_Y
 }
 
-export function buildTerrainField(track: Track): THREE.Mesh {
+/** Вершины поля отдельно от материала: обход проверяется тестом без DOM. */
+export function terrainPositions(track: Track): number[] {
   const cl = track.centerline
   const outer = SKIRT_RING_DISTANCES_M[SKIRT_RING_DISTANCES_M.length - 1]
   const margin = outer + track.widthM / 2 + GRID_STEP_M
@@ -85,9 +86,6 @@ export function buildTerrainField(track: Track): THREE.Mesh {
   }
 
   const positions: number[] = []
-  const uvs: number[] = []
-  // Та же трава, что на плоской земле: один тайл на 50 м мира.
-  const uvScale = 1 / 50
   const flatY = OUTER_Y + 0.001
 
   for (let ix = 0; ix < nx; ix++) {
@@ -105,11 +103,23 @@ export function buildTerrainField(track: Track): THREE.Mesh {
       const v10 = { x: x1, y: heights[ix + 1][iz], z: z0 }
       const v01 = { x: x0, y: heights[ix][iz + 1], z: z1 }
       const v11 = { x: x1, y: heights[ix + 1][iz + 1], z: z1 }
-      for (const v of [v00, v10, v01, v10, v11, v01]) {
+      // Обход против часовой при взгляде сверху (+Y): нормали вверх, иначе
+      // FrontSide отсекает поле и рядом с дорогой сквозит нижний уровень.
+      for (const v of [v00, v01, v10, v10, v01, v11]) {
         positions.push(v.x, v.y, v.z)
-        uvs.push(v.x * uvScale, v.z * uvScale)
       }
     }
+  }
+  return positions
+}
+
+export function buildTerrainField(track: Track): THREE.Mesh {
+  const positions = terrainPositions(track)
+  // Та же трава, что на плоской земле: один тайл на 50 м мира.
+  const uvScale = 1 / 50
+  const uvs: number[] = []
+  for (let i = 0; i < positions.length; i += 3) {
+    uvs.push(positions[i] * uvScale, positions[i + 2] * uvScale)
   }
 
   const geometry = new THREE.BufferGeometry()

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { skirtFalloff, SKIRT_RING_DISTANCES_M, terrainHeight } from './terrain'
+import { skirtFalloff, SKIRT_RING_DISTANCES_M, terrainHeight, terrainPositions } from './terrain'
 import type { Track } from '../track/schema'
 
 test('у кромки полотна юбка держит высоту трассы', () => {
@@ -59,4 +59,16 @@ test('высота поля у кромки — высота этого учас
 test('вдали от трассы поле сходит к плоской земле', () => {
   const track = twoLevelTrack()
   expect(terrainHeight(track, 500, -500)).toBeCloseTo(-0.25, 1)
+})
+
+test('треугольники поля смотрят нормалями вверх — не сквозь землю', () => {
+  // Регрессия: обход [v00, v10, v01] давал нормали вниз, FrontSide отсекал
+  // поле сверху, и рядом с дорогой сквозило нижним уровнем земли.
+  const positions = terrainPositions(twoLevelTrack())
+  for (let t = 0; t < positions.length; t += 9) {
+    const e1 = [positions[t + 3] - positions[t], positions[t + 4] - positions[t + 1], positions[t + 5] - positions[t + 2]]
+    const e2 = [positions[t + 6] - positions[t], positions[t + 7] - positions[t + 1], positions[t + 8] - positions[t + 2]]
+    const ny = e1[2] * e2[0] - e1[0] * e2[2]
+    expect(ny).toBeGreaterThan(0)
+  }
 })
