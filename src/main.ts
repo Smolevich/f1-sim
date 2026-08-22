@@ -1,6 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat'
 import { GhostRecorder, sampleGhost, type GhostLap } from './ghost/recorder'
 import { KeyboardInput } from './input/keyboard'
+import { GamepadInput, mergeInputs } from './input/gamepad'
+import { buildTouchOverlay, isTouchDevice, TouchInput } from './input/touch'
 import { submitLap } from './net/leaderboard'
 import { Vehicle } from './physics/vehicle'
 import { FIXED_STEP, stepsFor, type Accumulator } from './physics/world'
@@ -55,6 +57,8 @@ async function main(): Promise<void> {
   await RAPIER.init()
 
   const canvas = document.createElement('canvas')
+  // Иначе браузер на телефоне перехватывает касания под скролл и зум.
+  canvas.style.touchAction = 'none'
   document.body.style.margin = '0'
   document.body.style.overflow = 'hidden'
   document.body.appendChild(canvas)
@@ -117,7 +121,10 @@ async function main(): Promise<void> {
   const board = new LeaderboardPanel(name)
   void board.refresh(track.meta.id)
   const input = new KeyboardInput()
-  const minimap = new Minimap(track)
+  const gamepad = new GamepadInput()
+  const touch = new TouchInput()
+  if (isTouchDevice()) document.body.appendChild(buildTouchOverlay(touch))
+  const minimap = new Minimap(track, document.body, isTouchDevice())
   const recorder = new GhostRecorder()
 
   const makeVehicle = (): Vehicle => new Vehicle(undefined, startPose(track), track)
@@ -182,6 +189,8 @@ async function main(): Promise<void> {
 
   let cameraMode: CameraMode = 'chase'
   const hint = new ControlsHint()
+  // На телефоне подсказка клавиш бессмысленна и лежит под экранными кнопками.
+  if (isTouchDevice()) hint.toggle()
 
   // Возврат на месте, а не на старте: упереться в отбойник можно на любом метре,
   // и отправлять игрока в начало круга за это — значит заканчивать ему заезд.
@@ -266,7 +275,11 @@ async function main(): Promise<void> {
         position: { ...vehicle.telemetry().position },
         orientation: { ...vehicle.orientation() },
       }
-      const raw = input.read(FIXED_STEP)
+      // Клавиатура, экранные кнопки и геймпад работают одновременно:
+      // по каждой оси побеждает более сильная команда.
+      let raw = mergeInputs(input.read(FIXED_STEP), touch.read(FIXED_STEP))
+      const pad = gamepad.read()
+      if (pad !== null) raw = mergeInputs(raw, pad)
       // До гашения огней газ и руль заблокированы: фальстарта в этой игре
       // нет, но и трогаться раньше отсчёта нельзя.
       // До гашения огней болид на нейтрали и стояночном тормозе: газ

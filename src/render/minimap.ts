@@ -45,14 +45,19 @@ export class Minimap {
   private ctx: CanvasRenderingContext2D
   private projection: TrackProjection
 
-  constructor(track: Track, parent: HTMLElement = document.body) {
+  constructor(track: Track, parent: HTMLElement = document.body, raised = false) {
     this.projection = projectTrack(track, SIZE)
 
     this.canvas = document.createElement('canvas')
     this.canvas.width = this.canvas.height = SIZE
+    // На телефоне правый нижний угол занят кнопками газа и DRS — карта
+    // поднимается над ними и ужимается стилем, не тушкой канваса.
+    const place = raised
+      ? 'right:8px;bottom:42vh;width:26vmin;height:26vmin'
+      : 'right:16px;bottom:16px'
     this.canvas.setAttribute(
       'style',
-      'position:fixed;right:16px;bottom:16px;z-index:10;pointer-events:none;' +
+      `position:fixed;${place};z-index:4;pointer-events:none;` +
       'background:rgba(8,12,20,.55);border-radius:10px;',
     )
     parent.appendChild(this.canvas)
