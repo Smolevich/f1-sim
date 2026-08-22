@@ -18,16 +18,36 @@ const KEYS = [
   'H          скрыть подсказку',
 ]
 
+const GAMEPAD = [
+  '🎮 геймпад подключён',
+  'Левый стик   руль',
+  'RT / R2      газ',
+  'LT / L2      тормоз',
+  'A / крест    DRS',
+  '',
+]
+
 /** Панель управления: без неё игрок не знает даже про возврат на трассу. */
 export class ControlsHint {
   private root: HTMLDivElement
   private visible = true
 
-  constructor(parent: HTMLElement = document.body) {
+  constructor(parent: HTMLElement = document.body, target: EventTarget = window) {
     this.root = document.createElement('div')
     this.root.setAttribute('style', STYLE)
     this.root.textContent = KEYS.join('\n')
     parent.appendChild(this.root)
+
+    // Раскладка пада появляется в момент подключения: Gamepad API «видит»
+    // пад только после первого нажатия любой его кнопки.
+    target.addEventListener('gamepadconnected', () => this.render(true))
+    target.addEventListener('gamepaddisconnected', () => {
+      this.render(navigator.getGamepads().some((g) => g !== null))
+    })
+  }
+
+  private render(withGamepad: boolean): void {
+    this.root.textContent = (withGamepad ? [...GAMEPAD, ...KEYS] : KEYS).join('\n')
   }
 
   toggle(): void {
