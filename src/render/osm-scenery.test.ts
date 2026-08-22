@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { filterForestSpots, forestSpots, pointInPolygon, ribbonPositions } from './osm-scenery'
+import { filterForestSpots, forestSpots, pointInPolygon } from './osm-scenery'
 
 const square: [number, number][] = [[0, 0], [100, 0], [100, 100], [0, 100]]
 
@@ -22,15 +22,6 @@ test('лес рассаживается только внутри полигон
 
 test('рассадка детерминирована — при перезагрузке лес не прыгает', () => {
   expect(forestSpots(square, 15)).toEqual(forestSpots(square, 15))
-})
-
-test('лента овала имеет ширину и следует линии', () => {
-  const line = [{ x: 0, y: 0, z: 0 }, { x: 100, y: 0, z: 0 }]
-  const positions = ribbonPositions(line, 10)
-  // Два треугольника на сегмент, 3 вершины, 3 координаты.
-  expect(positions.length).toBe(18)
-  const zs = positions.filter((_, i) => i % 3 === 2)
-  expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(10)
 })
 
 test('деревья леса не сажаются на полотно и обочину', () => {

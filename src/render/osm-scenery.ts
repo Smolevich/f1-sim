@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { elevationAt } from '../track/elevation'
-import type { Track, TrackPoint } from '../track/schema'
+import type { Track } from '../track/schema'
 import { crownGeometry, hashRandom } from './scenery'
 
 /**
@@ -14,8 +14,6 @@ export type SceneryData = {
   grandstands: [number, number][][]
   /** Контуры лесных массивов. */
   forests: [number, number][][]
-  /** Полилинии старого овала. */
-  oval: { x: number; z: number }[][]
 }
 
 /** Чёт-нечёт по лучу: классика для контуров OSM без самопересечений. */
@@ -57,28 +55,6 @@ export function forestSpots(
   return spots
 }
 
-/** Лента вдоль незамкнутой полилинии: полотно старого овала. */
-export function ribbonPositions(line: TrackPoint[], widthM: number): number[] {
-  const half = widthM / 2
-  const positions: number[] = []
-  for (let i = 0; i < line.length - 1; i++) {
-    const a = line[i]
-    const b = line[i + 1]
-    const dx = b.x - a.x
-    const dz = b.z - a.z
-    const len = Math.hypot(dx, dz) || 1
-    const nx = -dz / len
-    const nz = dx / len
-    const l0 = { x: a.x + nx * half, y: a.y, z: a.z + nz * half }
-    const r0 = { x: a.x - nx * half, y: a.y, z: a.z - nz * half }
-    const l1 = { x: b.x + nx * half, y: b.y, z: b.z + nz * half }
-    const r1 = { x: b.x - nx * half, y: b.y, z: b.z - nz * half }
-    positions.push(l0.x, l0.y, l0.z, r0.x, r0.y, r0.z, l1.x, l1.y, l1.z)
-    positions.push(r0.x, r0.y, r0.z, r1.x, r1.y, r1.z, l1.x, l1.y, l1.z)
-  }
-  return positions
-}
-
 /**
  * Отбор точек леса: не ближе margin к осевой (иначе деревья на полотне) и не
  * дальше пояса видимости — лес парка тянется на километры, а рисовать есть
@@ -106,7 +82,6 @@ export function filterForestSpots(
 }
 
 const STAND_HEIGHT_M = 9
-const OVAL_WIDTH_M = 16
 /** Плотнее живого леса нельзя: инстансы копеечные, но фреймтайм не резиновый. */
 const FOREST_SPACING_M = 14
 const FOREST_CAP = 2600
@@ -115,36 +90,35 @@ export function buildOsmScenery(scenery: SceneryData, track: Track): THREE.Group
   const group = new THREE.Group()
   group.add(buildStands(scenery.grandstands, track))
   group.add(buildForest(scenery.forests, track))
-  group.add(buildOval(scenery.oval, track))
   return group
 }
 
 function buildStands(polygons: [number, number][][], track: Track): THREE.Group {
   const group = new THREE.Group()
-  const wall = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.9 })
-  const roof = new THREE.MeshStandardMaterial({ color: 0xc8102e, roughness: 0.7 })
+  // У ExtrudeGeometry материал 0 — крышки, материал 1 — стены: сверху крыша,
+  // сбоку бетон. Крыша тёмная, чтобы с высоты камеры не читалась асфальтом.
+  const materials = [
+    new THREE.MeshStandardMaterial({ color: 0x8f2430, roughness: 0.8 }),
+    new THREE.MeshStandardMaterial({ color: 0xd9d6cf, roughness: 0.9 }),
+  ]
 
   for (const polygon of polygons) {
     if (polygon.length < 3) continue
-    const shape = new THREE.Shape(polygon.map(([x, z]) => new THREE.Vector2(x, z)))
+    // Контур в плоскости Шейпа с зеркалом по z: поворот rotateX(-90°) вернёт
+    // след на место. Зеркалить готовую геометрию нельзя — отрицательный
+    // масштаб выворачивает обход вершин, и крыши отсекаются как изнанка.
+    const shape = new THREE.Shape(polygon.map(([x, z]) => new THREE.Vector2(x, -z)))
     const geometry = new THREE.ExtrudeGeometry(shape, {
       depth: STAND_HEIGHT_M, bevelEnabled: false,
     })
-    // Экструзия идёт вдоль +Z; кладём контур в план XZ, высоту — в Y.
     geometry.rotateX(-Math.PI / 2)
-    geometry.scale(1, 1, -1)
 
     const cx = polygon.reduce((s, p) => s + p[0], 0) / polygon.length
     const cz = polygon.reduce((s, p) => s + p[1], 0) / polygon.length
-    const mesh = new THREE.Mesh(geometry, wall)
+    const mesh = new THREE.Mesh(geometry, materials)
     mesh.position.y = elevationAt(track, cx, cz)
     mesh.castShadow = true
-
-    const roofGeometry = geometry.clone()
-    const roofMesh = new THREE.Mesh(roofGeometry, roof)
-    roofMesh.scale.y = 0.06
-    roofMesh.position.y = mesh.position.y + STAND_HEIGHT_M
-    group.add(mesh, roofMesh)
+    group.add(mesh)
   }
   return group
 }
@@ -195,23 +169,5 @@ function buildForest(polygons: [number, number][][], track: Track): THREE.Group 
   trunks.instanceMatrix.needsUpdate = true
   crowns.instanceMatrix.needsUpdate = true
   group.add(trunks, crowns)
-  return group
-}
-
-function buildOval(lines: { x: number; z: number }[][], track: Track): THREE.Group {
-  const group = new THREE.Group()
-  if (lines.length === 0) return group
-  const positions: number[] = []
-  for (const line of lines) {
-    const pts = line.map((p) => ({ x: p.x, y: elevationAt(track, p.x, p.z) + 0.05, z: p.z }))
-    positions.push(...ribbonPositions(pts, OVAL_WIDTH_M))
-  }
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-  geometry.computeVertexNormals()
-  // Выцветший бетон: овал заброшен с 60-х, он не должен спорить с трассой.
-  group.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-    color: 0x8e8a80, roughness: 1, side: THREE.DoubleSide,
-  })))
   return group
 }

@@ -5,7 +5,7 @@ import {
 } from './build-track'
 
 /**
- * Окружение трассы из OSM: трибуны, лес, старый овал. Пишет
+ * Окружение трассы из OSM: трибуны и лес. Пишет
  * public/tracks/<id>-scenery.json в местной системе координат трассы —
  * той же, в которой собрана осевая (общий origin по fetchCenterline).
  */
@@ -26,7 +26,6 @@ async function fetchScenery(bbox: string): Promise<OsmWay[]> {
   way["building"="grandstand"](${bbox});
   way["natural"="wood"](${bbox});
   way["landuse"="forest"](${bbox});
-  way["highway"="raceway"](${bbox});
 );
 out geom qt;`
   const res = await fetch(OVERPASS, {
@@ -89,7 +88,6 @@ async function main(): Promise<void> {
 
   const grandstands: [number, number][][] = []
   const forests: [number, number][][] = []
-  const oval: { x: number; z: number }[][] = []
 
   for (const w of ways) {
     const tags = w.tags ?? {}
@@ -106,19 +104,12 @@ async function main(): Promise<void> {
       if (local.some((p) => distanceToCenterline(p.x, p.z, centerline) <= FOREST_MAX_M)) {
         forests.push(local.map((p) => [round(p.x), round(p.z)]))
       }
-    } else if (tags.highway === 'raceway') {
-      // Старый скоростной овал — знаменитые виражи. Действующий круг сюда
-      // не попадает: его участки уже в осевой, дублировать полотно нельзя.
-      const name = tags.name ?? ''
-      if (/sopraelevata|anello/i.test(name)) {
-        oval.push(local.map((p) => ({ x: round(p.x), z: round(p.z) })))
-      }
     }
   }
 
-  console.log(`трибун: ${grandstands.length}, лесов: ${forests.length}, участков овала: ${oval.length}`)
+  console.log(`трибун: ${grandstands.length}, лесов: ${forests.length}`)
   const path = `public/tracks/${circuit.id}-scenery.json`
-  writeFileSync(path, JSON.stringify({ grandstands, forests, oval }))
+  writeFileSync(path, JSON.stringify({ grandstands, forests }))
   console.log(`записано ${path}`)
 }
 

@@ -47,7 +47,7 @@ import {
 import { recoveryPose } from './track/recovery'
 import { isOnTrack, startPose } from './track/geometry'
 import { elevationAt, withElevations } from './track/elevation'
-import { buildTerrainSkirt } from './render/terrain'
+import { buildTerrainField } from './render/terrain'
 import { buildOsmScenery, type SceneryData } from './render/osm-scenery'
 import type { Track } from './track/schema'
 
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   // а физика и тайминг ниже получают исходный плоский трек, чтобы старые
   // рекорды остались сопоставимы с новыми.
   const visualTrack = withElevations(track)
-  scene.add(buildTerrainSkirt(visualTrack))
+  scene.add(buildTerrainField(visualTrack))
   scene.add(buildTrackMesh(visualTrack))
   scene.add(buildTrackLines(visualTrack))
   scene.add(buildStartLine(visualTrack))
