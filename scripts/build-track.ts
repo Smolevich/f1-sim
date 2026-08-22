@@ -11,11 +11,11 @@ const OVERPASS = 'https://overpass-api.de/api/interpreter'
  * родительского отношения (Сильверстоун, Сузука): там боевой круг задан
  * явным списком id, найденным перебором замкнутых контуров нужной длины.
  */
-type OsmSource =
+export type OsmSource =
   | { kind: 'relation'; relationId: number }
   | { kind: 'ways'; wayIds: number[] }
 
-type Circuit = {
+export type Circuit = {
   id: string
   name: string
   country: string
@@ -28,7 +28,7 @@ type Circuit = {
   realRecord: { timeMs: number; driver: string; year: number }
 }
 
-const CIRCUITS: Record<string, Circuit> = {
+export const CIRCUITS: Record<string, Circuit> = {
   monza: {
     id: 'monza',
     name: 'Autodromo Nazionale di Monza',
@@ -120,7 +120,7 @@ const CIRCUITS: Record<string, Circuit> = {
   },
 }
 
-type LatLon = { lat: number; lon: number }
+export type LatLon = { lat: number; lon: number }
 type OsmWay = { id: number; tags?: Record<string, string>; geometry: LatLon[] }
 
 /**
@@ -129,7 +129,7 @@ type OsmWay = { id: number; tags?: Record<string, string>; geometry: LatLon[] }
  * произвольном направлении, поэтому узлы нельзя просто ссыпать в один массив:
  * получится каша. Участки сшиваются голова-к-хвосту в замкнутый контур.
  */
-async function fetchCenterline(
+export async function fetchCenterline(
   source: OsmSource, excludeNames: string[], officialLengthM: number,
 ): Promise<LatLon[]> {
   const query = source.kind === 'relation'
@@ -164,9 +164,15 @@ async function fetchCenterline(
  * Локальная проекция в метры относительно центра трассы. Для куска в несколько
  * километров плоской аппроксимации достаточно, UTM тут избыточен.
  */
-function toMeters(points: { lat: number; lon: number }[]): TrackPoint[] {
-  const lat0 = points.reduce((s, p) => s + p.lat, 0) / points.length
-  const lon0 = points.reduce((s, p) => s + p.lon, 0) / points.length
+export function originOf(points: LatLon[]): LatLon {
+  return {
+    lat: points.reduce((s, p) => s + p.lat, 0) / points.length,
+    lon: points.reduce((s, p) => s + p.lon, 0) / points.length,
+  }
+}
+
+export function toMeters(points: LatLon[], origin = originOf(points)): TrackPoint[] {
+  const { lat: lat0, lon: lon0 } = origin
   const mPerDegLat = 111_320
   const mPerDegLon = 111_320 * Math.cos((lat0 * Math.PI) / 180)
   return points.map((p) => ({
@@ -258,4 +264,6 @@ async function main(): Promise<void> {
   console.log(`записано public/tracks/${circuit.id}.json`)
 }
 
-main()
+// Скрипт импортируется build-scenery.ts ради fetchCenterline и проекции —
+// сборка трассы при этом запускаться не должна.
+if (process.argv[1]?.endsWith('build-track.ts')) main()

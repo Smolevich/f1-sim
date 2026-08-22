@@ -48,6 +48,7 @@ import { recoveryPose } from './track/recovery'
 import { isOnTrack, startPose } from './track/geometry'
 import { elevationAt, withElevations } from './track/elevation'
 import { buildTerrainSkirt } from './render/terrain'
+import { buildOsmScenery, type SceneryData } from './render/osm-scenery'
 import type { Track } from './track/schema'
 
 async function main(): Promise<void> {
@@ -84,9 +85,19 @@ async function main(): Promise<void> {
   scene.add(buildBarriers(visualTrack))
   scene.add(buildRacingLine(visualTrack))
   scene.add(buildBrakingMarkers(visualTrack))
-  scene.add(buildGrandstands(visualTrack))
-  scene.add(buildTrees(visualTrack))
   scene.add(buildHills(visualTrack))
+
+  // Окружение из OSM, если для трассы собрано: настоящие трибуны, лес и
+  // старый овал. Нет файла — процедурная рассадка, как раньше.
+  const scenery: SceneryData | null = await fetch(
+    `${import.meta.env.BASE_URL}tracks/${trackId}-scenery.json`,
+  ).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+  if (scenery !== null) {
+    scene.add(buildOsmScenery(scenery, track))
+  } else {
+    scene.add(buildGrandstands(visualTrack))
+    scene.add(buildTrees(visualTrack))
+  }
 
   // Модель W14: 232 тыс. треугольников против 16.5 тыс. у собственной
   // геометрии, колёса отдельными узлами. Если glb не отдался, остаётся своя

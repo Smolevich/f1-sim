@@ -34,7 +34,7 @@ const CROWN_REACH_M = 7
  * иначе призрак прошлого круга едет по другому пейзажу, а скриншоты не
  * сравниваются между сборками.
  */
-function hashRandom(seed: number): number {
+export function hashRandom(seed: number): number {
   const x = Math.sin(seed * 12.9898) * 43758.5453
   return x - Math.floor(x)
 }
@@ -306,7 +306,7 @@ const HIGH_FOLIAGE = 0x62a044
  * InstancedMesh стоили 13 мс на кадр: рощу в 420 деревьев рисовало три полных
  * прохода вместо одного, и каждый заливал те же пиксели заново.
  */
-function crownGeometry(): THREE.BufferGeometry {
+export function crownGeometry(): THREE.BufferGeometry {
   const positions: number[] = []
   const colors: number[] = []
   const low = new THREE.Color(LOW_FOLIAGE)
