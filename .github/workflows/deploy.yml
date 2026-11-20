@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'public/**'
+      - 'landing/**'
       - 'api/**'
       - 'deploy/**'
       - 'index.html'
@@ -97,6 +98,8 @@ jobs:
             sudo chown -R root:root "$WEB_DIR"
             sudo find "$WEB_DIR" -type d -exec chmod 755 {} +
             sudo find "$WEB_DIR" -type f -exec chmod 644 {} +
+            # Сюда игры из других репо кладут свои location'ы; vhost подключает каталог.
+            sudo mkdir -p /etc/nginx/games.d
             sudo install -m 0644 /tmp/deploy-f1-sim/deploy/nginx-f1-sim.conf \
               /etc/nginx/sites-available/f1-sim.conf
             sudo ln -sfn /etc/nginx/sites-available/f1-sim.conf \
